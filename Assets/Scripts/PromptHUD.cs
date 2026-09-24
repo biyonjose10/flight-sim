@@ -22,6 +22,8 @@ namespace FlightSim
         public float titleSeconds = 4f;
 
         [Header("Controls hint (top left)")]
+        [Tooltip("The keys this scene uses. The walking scenes and the flying scenes need different ones.")]
+        public string controlsHint = "WASD walk    Mouse look    E use    Esc free cursor";
         public float controlsHintSeconds = 12f;
 
         Interactable promptOwner;   // whoever is currently showing a prompt
@@ -93,11 +95,11 @@ namespace FlightSim
                 GUI.color = Color.white;
             }
 
-            if (since < controlsHintSeconds)
+            if (since < controlsHintSeconds && !string.IsNullOrEmpty(controlsHint))
             {
-                var hint = new Rect(16f, 16f, h * 0.62f, h * 0.045f);
+                var hint = new Rect(16f, 16f, h * 0.78f, h * 0.045f);
                 DrawBox(hint, new Color(0f, 0f, 0f, 0.45f));
-                GUI.Label(hint, "WASD walk    Mouse look    E use    Esc free cursor", hintStyle);
+                GUI.Label(hint, controlsHint, hintStyle);
             }
 
             if (CurrentPrompt != null)

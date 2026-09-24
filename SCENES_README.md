@@ -1,6 +1,6 @@
-# Flight Sim: scenes 1 and 2
+# Flight Sim: the four scenes
 
-The technical detail behind the two scenes: where things are, and why they're built the way they are.
+The technical detail behind the scenes: where things are, and why they're built the way they are.
 For running the project see `README.md`. For a walkthrough of the code see `HOW_IT_WORKS.md`.
 
 ## Scene 1: `Assets/Scenes/01_Terminal.unity`
@@ -38,6 +38,39 @@ side (the door side).
 | Ground | y = −3.6 | The cabin floor sits about door-sill height above the apron |
 
 All of these live in `Assets/Scripts/FlightLayout.cs`. **Change them there and rebuild.**
+
+## Scenes 3 and 4: `03_Takeoff.unity` and `04_Landing.unity`
+
+Both are built from the same three shared pieces, so they are almost the same scene.
+
+**The shared world** (`FlightLayout.World`, built by `WorldParts`): one runway along **X**, centred
+on the origin, 2600 m long and 45 m wide. Heading **90°** points the nose along +X. Land lies to the
+west, and the coast is at x = 6000 with the sea beyond it at y = −4. Clouds sit between 800 m and
+1500 m, and the haze runs from 900 m out to 14 km.
+
+**The aeroplane** (`FlightLayout.Plane`): `SharedParts.Airliner`, 36 m long, 2 m fuselage radius,
+origin at the middle of the fuselage. Its wheels hang 3.85 m below that origin, which is why the
+plane is parked at y = 3.85 rather than y = 0. `CockpitOffset` (7.6, −1.1, 0) is the shift that
+drops the scene-2 cockpit interior into the nose of the exterior shell so the two line up.
+
+**Scene 3** starts 120 m past the threshold with the engines idling. The numbers that decide how it
+flies are in `FlightLayout.Flight`:
+
+| | |
+|---|---|
+| Full-throttle acceleration | 4.5 m/s² |
+| Drag | `0.000066 × speed²`, which balances thrust at about 260 m/s |
+| Rotation speed | 75 m/s (about 146 kt) - below it the nose will not come up |
+| Pitch | −20°…+25°, at 22°/s, returning to level at 18°/s |
+| Roll | ±55°, at 50°/s, returning to level at 18°/s |
+| Gear | comes up above 20 m, but **only while climbing** |
+| Landing prompt | gear up and above 300 m |
+
+**Scene 4** is a timeline, not a flight. Its start position is **derived** from the speed and the
+durations (`ApproachSpeed × (DescentSeconds + FlareSeconds)`), which puts it 2808 m out at 180 m.
+That matters: if the distance and the speed disagreed, the plane would have to cheat to arrive on
+time and the speed on the instruments would be a lie. The flare height (14 m) falls out of the same
+sum rather than being typed in.
 
 ## Design decisions
 
@@ -89,15 +122,19 @@ modes, keywords and render queue itself.
 
 ## Verification
 
-- `Tools → Flight Sim → Snapshot Scenes` renders 8 fixed views to `Snapshots/` (committed, so they can
-  be reviewed without Unity).
-- `Tools → Flight Sim → Playtest` plays both scenes by itself. It walks the player up the walkway and
-  along the window to the gate, boards, walks down the aisle and back, into the cockpit, and presses
-  take-off. It fails on any runtime error, if the player gets stuck on something solid, if a zone
-  can't be reached, if a scene never loads, or if the "scene 3" message never appears.
+- `Tools → Flight Sim → Snapshot Scenes` renders 14 fixed views to `Snapshots/` (committed, so they
+  can be reviewed without Unity). The snapshot camera's far clip is 22 km, not the 2.5 km the two
+  indoor scenes needed - at 2.5 km the sea, the hills and the distant countryside disappear into
+  the skybox and look as though they were never built.
+- `Tools → Flight Sim → Playtest` plays the whole game by itself: it walks to the gate, boards,
+  walks the cabin into the cockpit, takes off on the aeroplane's autopilot, climbs past 300 m,
+  checks both cameras, begins the approach, and watches the landing through to the arrival card. It
+  fails on any runtime error, if the player gets stuck, if a zone can't be reached, if a scene never
+  loads, if the plane crashes, or if the landing never finishes.
 
 ## Not done yet
 
-- Scenes 3 (take-off and cruise) and 4 (landing).
-- Sound.
 - Walking passengers.
+- Nothing to collide with in the air: clouds and tower blocks are scenery, and only the ground ends
+  a flight.
+- No weather, no time of day, no other traffic.

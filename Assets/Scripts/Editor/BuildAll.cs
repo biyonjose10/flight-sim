@@ -16,7 +16,13 @@ namespace FlightSim.Build
     /// </summary>
     public static class BuildAll
     {
-        public static readonly string[] Scenes = { FlightLayout.TerminalScene, FlightLayout.CabinScene };
+        public static readonly string[] Scenes =
+        {
+            FlightLayout.TerminalScene,
+            FlightLayout.CabinScene,
+            FlightLayout.TakeoffScene,
+            FlightLayout.LandingScene
+        };
 
         [MenuItem("Tools/Flight Sim/Build Scenes", priority = 0)]
         public static void Build()
@@ -26,8 +32,14 @@ namespace FlightSim.Build
             ApplyProjectSettings();
             Prim.ResetCache();
 
+            // The sounds are assets the scenes point at, so they have to exist before the scenes
+            // are built. Generating them is quick and skips anything already there.
+            AudioBank.Generate();
+
             TerminalBuilder.Build();
             CabinBuilder.Build();
+            FlightBuilder.Build();
+            LandingBuilder.Build();
 
             AddScenesToBuildSettings();
             AssetDatabase.SaveAssets();
@@ -48,6 +60,18 @@ namespace FlightSim.Build
         public static void OpenScene2()
         {
             Open(FlightLayout.CabinScene);
+        }
+
+        [MenuItem("Tools/Flight Sim/Open Scene 3 (Take-off)", priority = 22)]
+        public static void OpenScene3()
+        {
+            Open(FlightLayout.TakeoffScene);
+        }
+
+        [MenuItem("Tools/Flight Sim/Open Scene 4 (Landing)", priority = 23)]
+        public static void OpenScene4()
+        {
+            Open(FlightLayout.LandingScene);
         }
 
         static void Open(string sceneName)

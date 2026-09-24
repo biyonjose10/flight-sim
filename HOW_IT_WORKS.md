@@ -157,6 +157,79 @@ passenger gets a different `phase`.
 Not a component: a `static class` of constants. The builders read it to place things, and the
 playtest reads it for its walking route. **Change a number here and rebuild** to move anything.
 
+### `Aircraft`: the flight model
+
+The most important script in the flying half of the game, and the one most worth being able to
+explain.
+
+It keeps **four numbers**: speed, pitch, roll and heading. Every frame it nudges them towards what
+the keys are asking for, then works out where the plane should be:
+
+| Number | Moved by | Held back by |
+|---|---|---|
+| speed | thrust (`throttle x MaxThrustAccel`) | drag, which grows with **speed squared** |
+| pitch | W and S | clamped to −20°…+25°, and returns to 0 when you let go |
+| roll | A and D | clamped to ±55°, and returns to 0 when you let go |
+| heading | the bank angle | nothing - a level plane flies straight |
+
+Two lines do most of the work:
+
+```csharp
+speed += (thrust - drag) * dt;                              // drag = DragFactor * speed * speed
+heading += 9.81f * Mathf.Tan(roll * Deg2Rad) / speed * Rad2Deg * dt;
+```
+
+The second is the **real formula for a balanced turn**: turn rate = g × tan(bank) ÷ speed. Steeper
+bank turns tighter, and going faster turns wider, exactly as in a real aeroplane. That is why the
+flying feels honest even though nothing else here is simulated.
+
+There is **no lift equation and no angle of attack**, which is a deliberate choice, not a shortcut
+that was never finished. It means the plane **cannot stall** — there is no lift to lose — and the
+clamps mean it cannot flip. The only way to end a flight badly is to fly into the ground.
+
+`scriptedFlight` hands the whole thing over to scene 4, where the flight model does not run at all.
+
+### `FlightCamera`: the two views
+
+V swaps between the pilot's seat and a camera outside. It is **not** a child of the aeroplane: it
+places itself every frame in `LateUpdate`, which runs after everything has finished moving. A child
+object cannot lag behind its own parent, and the chase camera has to lag to look smooth.
+
+The chase view uses only the plane's **heading**, ignoring pitch and roll. If the camera rolled with
+the plane, banking would spin the whole picture and you would lose the horizon.
+
+### `FlightHUD`, `LiveInstruments`
+
+`FlightHUD` draws speed, height, heading, the throttle bar and the gear state on the screen, and
+owns the two ways a flight ends: the "Press L to begin landing" prompt, and the crash message that
+restarts the scene. `LiveInstruments` drives the cockpit panel itself — the artificial horizon
+rotates with roll and slides with pitch, and the gauges follow the throttle. It reads `Aircraft` and
+writes transforms; it never works anything out twice.
+
+If there is no aeroplane in the scene, `LiveInstruments` does nothing at all. That is what lets the
+same cockpit be used in scene 2, where the plane is parked and there is nothing to show.
+
+### `LandingSequence` and `EndCard`: scene 4
+
+One clock and four stages: descent, flare, roll-out, arrived. At every moment the script works out
+exactly where the plane should be and calls `Aircraft.PlaceForScript` to put it there. Because it
+moves the *same* `Aircraft` component, the instruments, the engine sound and both cameras carry on
+working with no special cases anywhere.
+
+`EndCard` shows the arrival card and restarts the whole game on R. `FlightClock` is a plain `static`
+class holding the journey time — static rather than a component, because every scene destroys its
+own objects when the next one loads, while a static value belongs to the program and simply carries
+on.
+
+### `AircraftAudio`, `Ambience`, `Footsteps`
+
+`AircraftAudio` invents nothing: it watches `Aircraft` and turns those numbers into volume and
+pitch. Two engine loops play at once, quiet idle and loud roar, and the throttle **crossfades**
+between them — pitching a single sound up instead would make a jet sound like a hairdryer.
+
+`Footsteps` counts **distance walked**, not time. On a timer, walking into a wall would still make
+footsteps, and they would fall out of step with your speed.
+
 ---
 
 ## 4. The editor scripts, one by one
@@ -199,10 +272,30 @@ Helpers that wrap `GameObject.CreatePrimitive`. It also hides a Unity quirk: the
 2 units tall and 1 wide, so a cylinder of radius r and length L needs scale (2r, L/2, 2r).
 Materials are **updated in place** rather than recreated, because both scenes share them.
 
+### `FlightBuilder` and `LandingBuilder`
+Build scenes 3 and 4. They are almost the same scene: the same world, the same aeroplane, the same
+cockpit, the same camera. The differences are where the plane starts and who moves it.
+
+### `WorldParts`
+The airfield both flying scenes share - runway, taxiway, terminal, control tower, fields, roads,
+tower blocks, the coastline, the sea, the horizon hills and the clouds. Roughly a thousand objects,
+**none of them with a collider**, because you can never touch any of them and a thousand colliders
+would be work the physics engine does for nothing.
+
+### `CockpitParts`
+The cockpit interior, in one file, used by scenes 2, 3 and 4. It is why the windscreen you look
+through in the air is the one you walked up to on the ground.
+
+### `AudioBank`
+Generates all 13 sounds from maths and writes them as real `.wav` files. See the questions below
+for the one problem that makes this harder than it sounds.
+
 ### `SceneSnapshot` and `Playtest`
-`SceneSnapshot` places a temporary camera at 8 fixed viewpoints and saves each render as a PNG.
-`Playtest` enters play mode and uses the player's autopilot to walk the route. It records any error
-message and fails if the player is stuck, a zone isn't reached, or a scene never loads.
+`SceneSnapshot` places a temporary camera at 14 fixed viewpoints and saves each render as a PNG.
+`Playtest` enters play mode, walks the route with the player's autopilot, then **flies the take-off
+with the aeroplane's autopilot**, climbs away, checks both cameras, starts the approach and watches
+the landing to the arrival card. It records any error message and fails if the player is stuck, a
+zone isn't reached, a scene never loads, the plane crashes, or the landing never finishes.
 
 ---
 
@@ -225,6 +318,52 @@ message and fails if the player is stuck, a zone isn't reached, or a scene never
 ---
 
 ## 6. Likely questions, with answers
+
+**Is this a real flight simulator?**
+No, and deliberately not. It keeps four numbers — speed, pitch, roll and heading — and moves the
+plane from them. There is no lift equation, no angle of attack and no Rigidbody. A real flight model
+can stall and spin, which is miserable to demonstrate and much harder to explain. What it *does* use
+is the real formula for a banked turn, so the flying still behaves sensibly.
+
+**Why can't it stall?**
+Because lift is never calculated. A stall is what happens when a wing stops producing enough lift;
+if you never model lift, there is no lift to lose. On top of that, pitch is clamped to −20°…+25° and
+roll to ±55°, so the plane cannot be put into an attitude it could not recover from.
+
+**Where does the turn rate come from?**
+`turn rate = g × tan(bank) ÷ speed`. That is the standard result for a balanced turn: the horizontal
+part of the lift vector provides the centripetal force. It is why banking harder turns tighter, and
+why flying faster makes the same bank angle turn a wider circle.
+
+**What stops it accelerating for ever?**
+Drag grows with the **square** of speed, so it catches up with thrust. Full throttle balances drag at
+about 260 m/s, and nothing has to clamp the speed by hand.
+
+**How is the take-off prevented at walking pace?**
+Below rotation speed the nose simply will not come up, however hard you pull. That one rule replaces
+a whole stall model.
+
+**How are the sounds made, if nothing was downloaded?**
+`AudioBank.cs` builds every clip out of sine waves and filtered noise and writes real `.wav` files
+into `Assets/Audio/`. A jet is a low tone plus its harmonics plus broadband noise; wind is noise
+with the low frequencies filtered out; a chime is two sine waves with a long decay.
+
+**What is the hard part about generating a looping sound?**
+Making the end join the start. If the last sample does not lead naturally into the first, you hear a
+**click once per loop**, and it sounds broken. Two things fix it: every tone is snapped to a
+frequency that fits a whole number of cycles into the clip, and each noise layer's tail is
+crossfaded into a pre-generated run-up of the same noise. The build then measures the join and warns
+if it is still too big a jump.
+
+**Why does the artificial horizon need a frame around it?**
+Because it rotates. The sky-and-ground card has to be bigger than the hole you see it through, or a
+corner would swing into view when you bank. The bezel is four black bars sitting slightly in front
+of the screen, and they hide the overflow.
+
+**Scene 4 doesn't let me do anything. Isn't that cheating?**
+It is a choice, and it is the honest answer to give. The landing is a fixed timeline, so it looks
+correct every single time it is shown. You can still look around and swap cameras. Scene 3 is where
+you actually fly.
 
 **Why a CharacterController instead of a Rigidbody?**
 A Rigidbody is a physics object. It can be pushed, can tip over, and needs friction, drag and

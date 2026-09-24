@@ -129,19 +129,114 @@ namespace FlightSim.Build
 
             var pc = body.AddComponent<PlayerController>();
             pc.playerCamera = camGo.transform;
+
+            // Footsteps. They live on the player rather than in each scene, so the terminal and
+            // the cabin sound the same without either builder having to remember.
+            var steps = body.AddComponent<Footsteps>();
+            steps.source = OneShotSource(body.transform, "Footstep Source");
+            steps.step = AudioBank.Load(AudioBank.Footstep);
+
             return pc;
         }
 
-        /// <summary>One object holding the HUD and the fader for this scene.</summary>
-        public static void GameSystems(string title, string subtitle)
+        /// <summary>
+        /// One object holding the HUD and the fader for this scene. The controls hint is passed
+        /// in because the walking scenes and the flying scenes use completely different keys.
+        /// </summary>
+        public static PromptHUD GameSystems(string title, string subtitle, string controlsHint = null)
         {
             var go = new GameObject("Game Systems");
 
             var hud = go.AddComponent<PromptHUD>();
             hud.title = title;
             hud.subtitle = subtitle;
+            if (controlsHint != null) hud.controlsHint = controlsHint;
 
             go.AddComponent<SceneFader>();
+            return hud;
+        }
+
+        /// <summary>
+        /// The camera for the flying scenes. Unlike the walking scenes there is no
+        /// CharacterController and no body: you are sitting down, so the camera is on its own and
+        /// FlightCamera places it against the aeroplane every frame.
+        ///
+        /// The far clip plane is pushed a long way out because at altitude you can see for
+        /// kilometres, and anything beyond it would simply vanish.
+        /// </summary>
+        public static FlightCamera FlyingCamera(Transform plane)
+        {
+            var go = new GameObject("Flight Camera");
+            go.tag = "MainCamera";
+
+            var cam = go.AddComponent<Camera>();
+            cam.fieldOfView = 65f;
+            cam.nearClipPlane = 0.08f;
+            cam.farClipPlane = 22000f;
+            go.AddComponent<AudioListener>();
+
+            var fc = go.AddComponent<FlightCamera>();
+            fc.target = plane;
+            fc.eye = plane.Find("Pilot Eye");
+
+            if (fc.eye == null)
+                Debug.LogWarning("[Flight Sim] The aeroplane has no 'Pilot Eye', so the cockpit view will be wrong");
+
+            // Start in the pilot's seat, so the scene opens on the view out of the windscreen.
+            go.transform.position = fc.eye != null ? fc.eye.position : plane.position;
+            go.transform.rotation = plane.rotation;
+            return fc;
+        }
+
+        /// <summary>
+        /// An empty marker where the pilot's head sits, as a child of the aeroplane.
+        ///
+        /// The measurement in FlightLayout is taken in the model's nose-along-X frame, so it has
+        /// to be turned into the aeroplane's own frame first. Having a real object for it means
+        /// you can select it in the editor and see exactly where the camera will be, instead of
+        /// it being a number hidden inside a script.
+        /// </summary>
+        public static Transform PilotEye(Transform plane)
+        {
+            var eye = Prim.Empty(plane, "Pilot Eye",
+                                 FlightLayout.Plane.ModelToPlane(FlightLayout.Plane.EyeLocal)).transform;
+            eye.localRotation = Quaternion.identity;
+            return eye;
+        }
+
+        // ---------------------------------------------------------------------------- sound
+
+        /// <summary>
+        /// A looping sound. It starts silent: AircraftAudio and Ambience fade it in, because a
+        /// sound that begins at full volume is heard as a click.
+        ///
+        /// Everything is 2D (spatialBlend 0). These are sounds you are inside - the engines around
+        /// you, the air outside the window, the hum of a hall - rather than objects you walk past,
+        /// so placing them in 3D space would add nothing but a chance to get it wrong.
+        /// </summary>
+        public static AudioSource Loop(Transform parent, string name, string clipName, float startVolume = 0f)
+        {
+            var go = Prim.Empty(parent, name, Vector3.zero);
+
+            var source = go.AddComponent<AudioSource>();
+            source.clip = AudioBank.Load(clipName);
+            source.loop = true;
+            source.playOnAwake = false;
+            source.volume = startVolume;
+            source.spatialBlend = 0f;
+            return source;
+        }
+
+        /// <summary>One source that everything short is fired through, so they can overlap.</summary>
+        public static AudioSource OneShotSource(Transform parent, string name)
+        {
+            var go = Prim.Empty(parent, name, Vector3.zero);
+
+            var source = go.AddComponent<AudioSource>();
+            source.loop = false;
+            source.playOnAwake = false;
+            source.spatialBlend = 0f;
+            return source;
         }
 
         /// <summary>A walk-up-and-press-E zone that loads a scene.</summary>

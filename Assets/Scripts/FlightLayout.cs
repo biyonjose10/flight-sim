@@ -20,8 +20,11 @@ namespace FlightSim
         public const string TerminalScene = "01_Terminal";
         public const string CabinScene = "02_Cabin";
 
-        /// <summary>Scene 3. Not built yet, and the take-off button says so instead of crashing.</summary>
+        /// <summary>Scene 3: the take-off, and the flight you steer yourself.</summary>
         public const string TakeoffScene = "03_Takeoff";
+
+        /// <summary>Scene 4: the approach and landing, which plays itself while you watch.</summary>
+        public const string LandingScene = "04_Landing";
 
         // ------------------------------------------------------------------------- player
 
@@ -70,8 +73,6 @@ namespace FlightSim
 
             // The plane parked outside, side-on to the window, nose pointing east (+X).
             public static readonly Vector3 PlaneCentre = new Vector3(0f, -0.2f, 30f);
-            public const float FuselageLength = 36f;
-            public const float FuselageRadius = 2f;
             public const float PlaneDoorX = 14f;      // lines up with the gate, so the jet bridge is straight
 
             // The runway, beyond the plane, running east-west.
@@ -148,6 +149,241 @@ namespace FlightSim
                 new Vector3(5f, 0f, 0f),
                 new Vector3(8.1f, 0f, 0f)
             };
+        }
+
+        // ---------------------------------------------------------------------- the plane
+
+        /// <summary>
+        /// The aeroplane itself. Scene 1 parks it outside the window, scenes 3 and 4 fly it, and
+        /// all three build it from SharedParts.Airliner, so it is the same aircraft every time.
+        ///
+        /// Its origin is the middle of the fuselage, and the nose points towards +X.
+        /// </summary>
+        public static class Plane
+        {
+            public const float FuselageLength = 36f;
+            public const float FuselageRadius = 2f;
+
+            /// <summary>Half the fuselage: where the nose sphere and the tail cone sit.</summary>
+            public const float HalfLength = FuselageLength * 0.5f;
+
+            /// <summary>
+            /// How far the bottom of the wheels is below the middle of the fuselage. Park the
+            /// plane at this height and the tyres touch the ground exactly.
+            /// </summary>
+            public const float WheelDrop = 3.85f;
+
+            /// <summary>
+            /// Where the cockpit interior sits inside the exterior shell.
+            ///
+            /// The cockpit you walk into in scene 2 is built in the cabin's own coordinates (nose
+            /// at x = 10.4, floor at y = 0). The exterior shell has its nose at x = 18 and its
+            /// floor about 1.1 m below the middle. Shifting the interior by this much lines the
+            /// two up, so the windscreen you look through sits behind the cockpit windows you can
+            /// see from outside.
+            /// </summary>
+            public static readonly Vector3 CockpitOffset = new Vector3(7.6f, -1.1f, 0f);
+
+            /// <summary>The pilot's eye, relative to the middle of the fuselage.</summary>
+            public static readonly Vector3 EyeLocal = new Vector3(15.8f, 0.15f, 0f);
+
+            /// <summary>
+            /// How far the model has to be turned inside the aeroplane to point where it is going.
+            ///
+            /// The shell and the cockpit are both built with the **nose along +X**, because that
+            /// is how scene 1 and scene 2 are laid out. Unity's idea of "forward", and therefore
+            /// the direction Aircraft flies in, is **+Z**. Without this quarter turn the plane
+            /// travels sideways down the runway: the fuselage sits across it, and the cockpit
+            /// ends up 7.6 m off to one side of the pilot's head.
+            ///
+            /// Turning the model rather than rewriting the geometry keeps scenes 1 and 2 working
+            /// exactly as they did.
+            /// </summary>
+            public const float ModelYaw = -90f;
+
+            /// <summary>Turns a measurement taken in the model's nose-along-X frame into the aeroplane's own frame.</summary>
+            public static Vector3 ModelToPlane(Vector3 inModelFrame)
+            {
+                return Quaternion.Euler(0f, ModelYaw, 0f) * inModelFrame;
+            }
+        }
+
+        // --------------------------------------------------------------------- the airfield
+
+        /// <summary>
+        /// The world scenes 3 and 4 share: one runway along X, centred on the origin, with land
+        /// to the west and the sea to the east. Both scenes build it from WorldParts, so the
+        /// airport you take off from is the airport you land at.
+        /// </summary>
+        public static class World
+        {
+            public const float GroundY = 0f;
+            public const float RunwayLength = 2600f;
+            public const float RunwayWidth = 45f;
+
+            /// <summary>The west end of the runway, where a take-off starts.</summary>
+            public const float ThresholdX = -RunwayLength * 0.5f;
+
+            /// <summary>The east end, where a landing finishes.</summary>
+            public const float FarEndX = RunwayLength * 0.5f;
+
+            /// <summary>Past this point the land stops and the sea begins.</summary>
+            public const float CoastX = 6000f;
+            public const float SeaY = -4f;
+
+            public const float CloudLowY = 800f;
+            public const float CloudHighY = 1500f;
+            public const int CloudCount = 90;
+
+            /// <summary>Haze, so the horizon fades out instead of ending in a hard line.</summary>
+            public const float FogStart = 900f;
+            public const float FogEnd = 14000f;
+        }
+
+        // ------------------------------------------------------------------- scene 3: flight
+
+        /// <summary>
+        /// Take-off and free flight. You fly this one yourself, and the numbers below are what
+        /// make it forgiving: the plane levels itself when you let go of the keys, and it can
+        /// neither stall nor flip over.
+        /// </summary>
+        public static class Flight
+        {
+            /// <summary>Lined up on the runway threshold, wheels on the ground, nose towards +X.</summary>
+            public static readonly Vector3 PlaneStart = new Vector3(World.ThresholdX + 120f, Plane.WheelDrop, 0f);
+
+            // ------------------------------------------------------------- engines and speed
+
+            /// <summary>How fast the throttle lever itself moves, from 0 to 1, per second.</summary>
+            public const float ThrottleRate = 0.5f;
+
+            /// <summary>Acceleration at full throttle, in metres per second, per second.</summary>
+            public const float MaxThrustAccel = 4.5f;
+
+            /// <summary>
+            /// Drag grows with the square of speed, which is what stops the plane accelerating
+            /// for ever. Full thrust balances this drag at about 260 m/s.
+            /// </summary>
+            public const float DragFactor = 0.000066f;
+
+            /// <summary>Wheel brakes, used when the throttle is closed on the ground.</summary>
+            public const float BrakeDecel = 3.5f;
+
+            /// <summary>
+            /// Rotation speed. Below this the wheels stay down however hard you pull; above it the
+            /// plane flies. A real A320 rotates at about 150 knots, which is roughly this.
+            /// </summary>
+            public const float RotateSpeed = 75f;
+
+            // --------------------------------------------------------------------- controls
+
+            public const float PitchRate = 22f;      // degrees per second while W or S is held
+            public const float PitchMin = -20f;      // nose down
+            public const float PitchMax = 25f;       // nose up
+            public const float RollRate = 50f;
+            public const float RollMax = 55f;
+
+            /// <summary>
+            /// How fast pitch and roll fall back to level when you are not touching the keys.
+            /// This is the "assisted" part: let go and the plane sorts itself out.
+            /// </summary>
+            public const float LevelRate = 18f;
+
+            /// <summary>Nosewheel steering on the ground, in degrees per second.</summary>
+            public const float GroundSteerRate = 12f;
+
+            // ------------------------------------------------------------------------- gear
+
+            /// <summary>Above this height the gear folds away by itself, as a real one would.</summary>
+            public const float GearAutoRetractAltitude = 20f;
+            public const float GearMoveSeconds = 3f;
+
+            // ------------------------------------------------------------------- the ending
+
+            /// <summary>Gear up and higher than this, and "Press L to begin landing" appears.</summary>
+            public const float LandingPromptAltitude = 300f;
+            public const KeyCode LandingKey = KeyCode.L;
+
+            /// <summary>
+            /// Touching the ground away from the runway ends the flight. The scene reloads after
+            /// this long, so a bad flight is never a dead end.
+            /// </summary>
+            public const float CrashRestartSeconds = 3.5f;
+        }
+
+        // ------------------------------------------------------------------- the two cameras
+
+        /// <summary>
+        /// The two views, in both scene 3 and scene 4. V swaps between them. In the pilot's seat
+        /// the mouse looks around the cockpit; outside it swings the camera around the plane, and
+        /// the scroll wheel moves it closer or further away.
+        /// </summary>
+        public static class FlightCam
+        {
+            public const KeyCode ToggleKey = KeyCode.V;
+
+            public const float ChaseDistance = 55f;
+            public const float ChaseMinDistance = 25f;
+            public const float ChaseMaxDistance = 150f;
+            public const float ChaseHeight = 10f;
+            public const float ZoomRate = 40f;
+
+            /// <summary>How quickly the chase camera catches up. Lower is lazier and smoother.</summary>
+            public const float FollowSharpness = 4f;
+
+            public const float StartOrbitYaw = -18f;
+            public const float StartOrbitPitch = 12f;
+            public const float MinOrbitPitch = -70f;
+            public const float MaxOrbitPitch = 80f;
+
+            /// <summary>How far you can turn your head in the pilot's seat, in degrees.</summary>
+            public const float CockpitYawLimit = 120f;
+            public const float CockpitPitchLimit = 70f;
+        }
+
+        // ------------------------------------------------------------------ scene 4: landing
+
+        /// <summary>
+        /// The approach and touchdown. You fly none of this: the whole thing is a timeline, and
+        /// these are its milestones in seconds from the moment the scene starts. You can still
+        /// look around and swap cameras the whole way down.
+        /// </summary>
+        public static class Landing
+        {
+            public const float ApproachSpeed = 72f;
+            public const float TouchdownSpeed = 66f;
+
+            /// <summary>Where the wheels are meant to meet the tarmac.</summary>
+            public const float TouchdownX = World.ThresholdX + 330f;
+
+            /// <summary>How high the approach begins, above the wheels' resting height.</summary>
+            public const float StartAltitude = 180f;
+
+            // The timeline.
+            public const float DescentSeconds = 36f;   // a steady glide down to the flare
+            public const float FlareSeconds = 3f;      // nose comes up, the sink rate washes off
+            public const float RollOutSeconds = 13f;   // reverse thrust and brakes, down to a stop
+            public const float EndCardDelay = 1.5f;    // a breath after stopping, then the card
+
+            /// <summary>
+            /// Where the approach starts, worked out from the numbers above rather than typed in.
+            ///
+            /// This matters: if the distance and the speed disagreed, the plane would have to
+            /// cheat to arrive on time and the speed on the instruments would be a lie. Flying at
+            /// ApproachSpeed for the whole descent and flare covers exactly this far, so the
+            /// readout you see is the speed it is really travelling.
+            /// </summary>
+            public static readonly Vector3 PlaneStart = new Vector3(
+                TouchdownX - ApproachSpeed * (DescentSeconds + FlareSeconds),
+                Plane.WheelDrop + StartAltitude,
+                0f);
+
+            public const float ApproachPitch = -3f;    // nose slightly down on the glideslope
+            public const float FlarePitch = 6f;        // nose up over the threshold
+            public const float StopPitch = 0f;
+
+            /// <summary>Press this on the arrival card to fly the whole thing again.</summary>
+            public const KeyCode RestartKey = KeyCode.R;
         }
     }
 }

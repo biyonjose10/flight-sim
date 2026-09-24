@@ -65,6 +65,90 @@ namespace FlightSim.Build
             Prim.Box(e, "Pylon", new Vector3(-0.3f, radius + 0.3f, 0f), new Vector3(length * 0.7f, 0.7f, 0.22f), PlaneWhite);
         }
 
+        /// <summary>
+        /// The whole A320-style aeroplane, nose towards +X, built around the middle of the
+        /// fuselage. The fuselage is one long cylinder with a squashed sphere at each end.
+        ///
+        /// Scene 1 parks it outside the terminal window, and scenes 3 and 4 fly it, so it lives
+        /// here rather than in any one scene's builder.
+        ///
+        /// Returns the plane's root, and puts every wheel under a child called "Landing Gear" so
+        /// the flying scenes can fold it away without hunting through the hierarchy.
+        /// </summary>
+        public static Transform Airliner(Transform parent, Vector3 centre)
+        {
+            var p = Prim.Empty(parent, "Airliner (your plane)", centre).transform;
+            float L = FlightLayout.Plane.FuselageLength;
+            float R = FlightLayout.Plane.FuselageRadius;
+            float half = FlightLayout.Plane.HalfLength;
+
+            Prim.Cyl(p, "Fuselage", Vector3.zero, R, L, Prim.AxisX, PlaneWhite);
+            Prim.Sphere(p, "Nose", new Vector3(half, 0f, 0f), new Vector3(6f, R * 2f, R * 2f), PlaneWhite);
+            Prim.Sphere(p, "Tail Cone", new Vector3(-half, 0.15f, 0f), new Vector3(9f, R * 1.9f, R * 1.9f), PlaneWhite);
+
+            // The markings are thin plates stuck to each SIDE of the fuselage, not boxes running
+            // through it.
+            //
+            // A single box spanning the full width is simpler and looks identical from outside -
+            // which is how scene 1 always saw it. But scenes 3 and 4 put you INSIDE this shell,
+            // and from the pilot's seat those boxes cut straight through the cockpit: the blue
+            // cheatline becomes a solid floor half a metre below your eyes.
+            foreach (int side in new[] { -1, 1 })
+            {
+                float skin = side * (R - 0.01f);
+
+                Prim.Box(p, "Cheatline", new Vector3(0f, -0.35f, skin), new Vector3(L * 0.96f, 0.26f, 0.06f), PlaneBlue);
+
+                for (float x = -13f; x <= 12.5f; x += 0.95f)
+                    Prim.Box(p, "Window", new Vector3(x, 0.45f, skin), new Vector3(0.3f, 0.36f, 0.06f), PlaneWindows);
+
+                Prim.Box(p, "Cockpit Windows", new Vector3(half + 1.5f, 0.7f, side * 1.6f),
+                         new Vector3(1.1f, 0.42f, 0.08f), new Vector3(0f, 0f, -25f), PlaneWindows);
+            }
+
+            Prim.Box(p, "Rear Door", new Vector3(-12f, -0.25f, -R - 0.01f), new Vector3(0.9f, 1.8f, 0.06f), EngineCowl);
+            Prim.Text3D(p, "Airline Name", new Vector3(-2f, 1.1f, -R - 0.03f), Vector3.zero, "FLIGHT SIM AIR", 0.09f, new Color(0.1f, 0.25f, 0.6f));
+
+            // Tail.
+            // Narrow and only slightly tilted, so it reads as a swept fin rather than a diamond.
+            Prim.Box(p, "Fin", new Vector3(-half - 2.4f, R + 2.2f, 0f), new Vector3(3.6f, 5.4f, 0.35f), new Vector3(0f, 0f, 18f), PlaneBlue);
+
+            foreach (int side in new[] { -1, 1 })
+            {
+                Wing(p, "Wing", new Vector3(1.5f, -1.3f, 0f), side, 1.2f, 17f, 5.5f, 22f, true);
+                Wing(p, "Tailplane", new Vector3(-half - 1.5f, 0.5f, 0f), side, 0.6f, 6f, 2.8f, 30f, false);
+                Engine(p, "Engine", new Vector3(2.8f, -2.45f, side * 6f), 0.95f, 4f);
+            }
+
+            LandingGear(p, half);
+
+            // Red anti-collision beacons, top and bottom, flashing out of step.
+            SceneKit.Blinker(p, "Beacon (top)", new Vector3(1f, R + 0.15f, 0f), 0.3f, BeaconRed, new Color(1f, 0.1f, 0.1f), 8f, 0.12f, 1.1f, 0f);
+            SceneKit.Blinker(p, "Beacon (belly)", new Vector3(1f, -R - 0.15f, 0f), 0.3f, BeaconRed, new Color(1f, 0.1f, 0.1f), 8f, 0.12f, 1.1f, 0.6f);
+
+            return p;
+        }
+
+        /// <summary>
+        /// The three legs, grouped under one object. Scene 1's plane is parked, so its gear just
+        /// sits there; in the air, LandingGearAnimator swings this whole group up into the belly.
+        /// </summary>
+        static void LandingGear(Transform plane, float half)
+        {
+            var gear = Prim.Empty(plane, "Landing Gear", Vector3.zero).transform;
+
+            foreach (int side in new[] { -1, 1 })
+            {
+                var leg = Prim.Empty(gear, "Main Gear", new Vector3(-1f, -1.7f, side * 2.8f)).transform;
+                Prim.Cyl(leg, "Strut", new Vector3(0f, -0.9f, 0f), 0.16f, 1.8f, Prim.AxisY, GearMetal);
+                Prim.Cyl(leg, "Wheel", new Vector3(0f, -1.7f, 0f), 0.45f, 0.7f, Prim.AxisZ, Tyre);
+            }
+
+            var nose = Prim.Empty(gear, "Nose Gear", new Vector3(half - 2f, -1.9f, 0f)).transform;
+            Prim.Cyl(nose, "Strut", new Vector3(0f, -0.8f, 0f), 0.12f, 1.6f, Prim.AxisY, GearMetal);
+            Prim.Cyl(nose, "Wheel", new Vector3(0f, -1.5f, 0f), 0.35f, 0.5f, Prim.AxisZ, Tyre);
+        }
+
         // ------------------------------------------------------------------ the airport
 
         /// <summary>A runway lying along X, centred on the given point, with markings and edge lights.</summary>

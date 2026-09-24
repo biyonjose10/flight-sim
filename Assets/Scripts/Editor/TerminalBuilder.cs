@@ -35,9 +35,10 @@ namespace FlightSim.Build
             Ground(outside);
             SharedParts.JetBridge(outside, T.GateX, T.WindowZ + 0.6f, T.PlaneCentre.z - 1.35f, 0f, T.GroundY);
             SharedParts.Runway(outside, new Vector3(0f, T.GroundY, T.RunwayCentreZ), T.RunwayLength, T.RunwayWidth);
-            Airliner(outside, T.PlaneCentre);
+            SharedParts.Airliner(outside, T.PlaneCentre);
 
             People(new GameObject("People").transform);
+            Sound(new GameObject("Sound").transform);
 
             // Sun high in the south, so it lights the side of the plane that faces the window.
             SceneKit.Environment(new Vector3(42f, 25f, 0f), 1.15f, 250f, 1400f);
@@ -48,6 +49,22 @@ namespace FlightSim.Build
                                  "Have a look out of the window, then walk to the gate door to board");
 
             SceneKit.Save(scene, FlightLayout.TerminalScene);
+        }
+
+        /// <summary>
+        /// What the departure hall sounds like: a low hum that never stops, and a boarding call
+        /// every half-minute or so. An empty room with no sound at all reads as a fault rather
+        /// than as quiet.
+        /// </summary>
+        static void Sound(Transform t)
+        {
+            var ambience = t.gameObject.AddComponent<Ambience>();
+            ambience.bed = SceneKit.Loop(t, "Hall Hum", AudioBank.HallHum, 0.6f);
+            ambience.occasional = SceneKit.OneShotSource(t, "Announcements");
+            ambience.occasionalClip = AudioBank.Load(AudioBank.PaChime);
+            ambience.occasionalVolume = 0.45f;
+            ambience.minGap = 22f;
+            ambience.maxGap = 45f;
         }
 
         static void CreateMaterials()
@@ -288,51 +305,6 @@ namespace FlightSim.Build
             Prim.Box(o, "Terminal Lower Floor", new Vector3(0f, (g - 0.1f) * 0.5f, midZ), new Vector3(width, -g - 0.1f, T.WindowZ - T.BackWallZ), SharedParts.Facade);
             Prim.Box(o, "Terminal Roof", new Vector3(0f, T.CeilingY + 0.35f, midZ + 0.4f),
                      new Vector3(width + 0.2f, 0.6f, T.WindowZ - T.BackWallZ + 1.4f), SharedParts.Roof);
-        }
-
-        /// <summary>
-        /// The A320-style plane, nose towards +X, with its left side (the door side) facing the
-        /// terminal. The fuselage is one long cylinder with a squashed sphere at each end.
-        /// </summary>
-        static void Airliner(Transform parent, Vector3 centre)
-        {
-            var p = Prim.Empty(parent, "Airliner (your plane)", centre).transform;
-            float L = T.FuselageLength, R = T.FuselageRadius, half = L * 0.5f;
-
-            Prim.Cyl(p, "Fuselage", Vector3.zero, R, L, Prim.AxisX, SharedParts.PlaneWhite);
-            Prim.Sphere(p, "Nose", new Vector3(half, 0f, 0f), new Vector3(6f, R * 2f, R * 2f), SharedParts.PlaneWhite);
-            Prim.Sphere(p, "Tail Cone", new Vector3(-half, 0.15f, 0f), new Vector3(9f, R * 1.9f, R * 1.9f), SharedParts.PlaneWhite);
-
-            // Boxes slightly wider than the fuselage, so they show on both sides as a stripe and windows.
-            Prim.Box(p, "Cheatline", new Vector3(0f, -0.35f, 0f), new Vector3(L * 0.96f, 0.26f, R * 2f - 0.02f), SharedParts.PlaneBlue);
-            for (float x = -13f; x <= 12.5f; x += 0.95f)
-                Prim.Box(p, "Window", new Vector3(x, 0.45f, 0f), new Vector3(0.3f, 0.36f, 3.94f), SharedParts.PlaneWindows);
-
-            Prim.Box(p, "Cockpit Windows", new Vector3(half + 1.5f, 0.7f, 0f), new Vector3(1.1f, 0.42f, 3.3f), new Vector3(0f, 0f, -25f), SharedParts.PlaneWindows);
-            Prim.Box(p, "Rear Door", new Vector3(-12f, -0.25f, -1.99f), new Vector3(0.9f, 1.8f, 0.06f), SharedParts.EngineCowl);
-            Prim.Text3D(p, "Airline Name", new Vector3(-2f, 1.1f, -1.72f), Vector3.zero, "FLIGHT SIM AIR", 0.09f, new Color(0.1f, 0.25f, 0.6f));
-
-            // Tail.
-            // Narrow and only slightly tilted, so it reads as a swept fin rather than a diamond.
-            Prim.Box(p, "Fin", new Vector3(-half - 2.4f, R + 2.2f, 0f), new Vector3(3.6f, 5.4f, 0.35f), new Vector3(0f, 0f, 18f), SharedParts.PlaneBlue);
-
-            foreach (int side in new[] { -1, 1 })
-            {
-                SharedParts.Wing(p, "Wing", new Vector3(1.5f, -1.3f, 0f), side, 1.2f, 17f, 5.5f, 22f, true);
-                SharedParts.Wing(p, "Tailplane", new Vector3(-half - 1.5f, 0.5f, 0f), side, 0.6f, 6f, 2.8f, 30f, false);
-                SharedParts.Engine(p, "Engine", new Vector3(2.8f, -2.45f, side * 6f), 0.95f, 4f);
-
-                // Main landing gear.
-                Prim.Cyl(p, "Main Gear Strut", new Vector3(-1f, -2.6f, side * 2.8f), 0.16f, 1.8f, Prim.AxisY, SharedParts.GearMetal);
-                Prim.Cyl(p, "Main Gear Wheel", new Vector3(-1f, -3.4f, side * 2.8f), 0.45f, 0.7f, Prim.AxisZ, SharedParts.Tyre);
-            }
-
-            Prim.Cyl(p, "Nose Gear Strut", new Vector3(half - 2f, -2.7f, 0f), 0.12f, 1.6f, Prim.AxisY, SharedParts.GearMetal);
-            Prim.Cyl(p, "Nose Gear Wheel", new Vector3(half - 2f, -3.4f, 0f), 0.35f, 0.5f, Prim.AxisZ, SharedParts.Tyre);
-
-            // Red anti-collision beacons, top and bottom, flashing out of step.
-            SceneKit.Blinker(p, "Beacon (top)", new Vector3(1f, R + 0.15f, 0f), 0.3f, SharedParts.BeaconRed, new Color(1f, 0.1f, 0.1f), 8f, 0.12f, 1.1f, 0f);
-            SceneKit.Blinker(p, "Beacon (belly)", new Vector3(1f, -R - 0.15f, 0f), 0.3f, SharedParts.BeaconRed, new Color(1f, 0.1f, 0.1f), 8f, 0.12f, 1.1f, 0.6f);
         }
     }
 }

@@ -39,7 +39,13 @@ namespace FlightSim
 
         void Start()
         {
-            Debug.Log("[SCENE] Now in '" + SceneManager.GetActiveScene().name + "'");
+            string here = SceneManager.GetActiveScene().name;
+            Debug.Log("[SCENE] Now in '" + here + "'");
+
+            // The journey clock runs from the terminal to the runway at the far end, so arriving
+            // back in scene 1 - whether that is the first play or "fly again" - starts it over.
+            if (here == FlightLayout.TerminalScene) FlightClock.Restart();
+
             StartCoroutine(Fade(1f, 0f));
         }
 

@@ -11,5 +11,11 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/02_Cabin.unity
     guid: 83fadd3f751837d4baa3b9a376e46f10
+  - enabled: 1
+    path: Assets/Scenes/03_Takeoff.unity
+    guid: 6ce038e71cb7d764ead86ac8ebd17cf1
+  - enabled: 1
+    path: Assets/Scenes/04_Landing.unity
+    guid: 4eeaacfc257df474aba87cedf5a2b8ce
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0

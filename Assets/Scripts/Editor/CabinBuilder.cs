@@ -16,10 +16,11 @@ namespace FlightSim.Build
     /// </summary>
     public static class CabinBuilder
     {
+        // The cockpit has its own palette, in CockpitParts. "Panel Black" and "Cabin Window Glass"
+        // are named in both files on purpose: Prim looks materials up by name, so both scenes end
+        // up sharing one material asset rather than each making its own.
         static Material floorMat, aisleCarpet, wallPanel, ceilingMat, binMat, binLip, seatShell, seatFabric, headrestCover,
-                        lightStrip, readingLight, bulkheadMat, galleyMat, worktop, glass, doorMat, exitSign,
-                        cockpitGrey, cockpitFloor, panelBlack, glareshield, screenSky, screenGround, screenNav, screenEngine,
-                        screenLine, magenta, amber, buttonGreen, pedestalMat, leverKnob, pilotSeatMat, stickMat;
+                        lightStrip, readingLight, bulkheadMat, galleyMat, worktop, glass, doorMat, exitSign, panelBlack;
 
         public static void Build()
         {
@@ -33,18 +34,43 @@ namespace FlightSim.Build
             FrontOfCabin(cabin);
             Lights(cabin);
 
-            Cockpit(new GameObject("Cockpit").transform);
+            CockpitParts.Cockpit(new GameObject("Cockpit").transform);
             Outside(new GameObject("Outside").transform);
             Passengers(new GameObject("Passengers").transform);
+            Sound(new GameObject("Sound").transform);
 
             SceneKit.Environment(new Vector3(40f, 60f, 0f), 1.1f, 300f, 1800f);
             SceneKit.Player(C.PlayerSpawn, C.PlayerSpawnYaw);
             SceneKit.Zone("Take-off Zone (Thrust Levers)", C.TakeoffZoneCentre, C.TakeoffZoneSize,
                           "Press E to take off", FlightLayout.TakeoffScene,
-                          "Take-off is scene 3 - it hasn't been built yet.");
+                          "Scene 3 isn't in the build settings - run Tools > Flight Sim > Add Scenes To Build Settings.");
             SceneKit.GameSystems("On Board - Flight FS 204", "Walk the cabin, then head through the open door to the cockpit");
 
             SceneKit.Save(scene, FlightLayout.CabinScene);
+        }
+
+        /// <summary>
+        /// What a cabin sounds like before pushback: air conditioning, the engines idling away
+        /// beyond the wall, and the odd seatbelt chime. All of it quiet - you are meant to notice
+        /// it only if it stops.
+        /// </summary>
+        static void Sound(Transform t)
+        {
+            var ambience = t.gameObject.AddComponent<Ambience>();
+            ambience.bed = SceneKit.Loop(t, "Air Conditioning", AudioBank.Aircon, 0.5f);
+            ambience.occasional = SceneKit.OneShotSource(t, "Cabin Chime");
+            ambience.occasionalClip = AudioBank.Load(AudioBank.Chime);
+            ambience.occasionalVolume = 0.4f;
+            ambience.minGap = 25f;
+            ambience.maxGap = 50f;
+
+            // The engines are outside the cabin wall, so they are a steady muffled rumble rather
+            // than anything that changes.
+            // Nothing manages this one, so it has to start itself. Ambience only ever presses play
+            // on the bed and the occasional sound.
+            var engines = SceneKit.Loop(t, "Engines Outside", AudioBank.JetIdle, 0.28f);
+            engines.pitch = 0.75f;
+            engines.playOnAwake = true;
         }
 
         static void CreateMaterials()
@@ -66,22 +92,9 @@ namespace FlightSim.Build
             glass         = Prim.Glass("Cabin Window Glass", new Color(0.8f, 0.9f, 1f, 0.12f));
             doorMat       = Prim.Mat("Cabin Door", new Color(0.78f, 0.79f, 0.8f), 0.3f, 0.4f);
             exitSign      = Prim.Emissive("Exit Sign", new Color(0.1f, 0.5f, 0.2f), new Color(0.1f, 0.9f, 0.3f));
-            cockpitGrey   = Prim.Mat("Cockpit Grey", new Color(0.32f, 0.34f, 0.37f), 0.1f, 0.3f);
-            cockpitFloor  = Prim.Mat("Cockpit Floor", new Color(0.15f, 0.15f, 0.16f));
+
+            // The galley oven and coffee maker are the same black plastic as the flight deck panel.
             panelBlack    = Prim.Mat("Panel Black", new Color(0.06f, 0.06f, 0.07f), 0.2f, 0.4f);
-            glareshield   = Prim.Mat("Glareshield", new Color(0.1f, 0.1f, 0.11f));
-            screenSky     = Prim.Emissive("Screen Sky", new Color(0.15f, 0.4f, 0.9f), new Color(0.2f, 0.55f, 1.3f));
-            screenGround  = Prim.Emissive("Screen Ground", new Color(0.5f, 0.3f, 0.12f), new Color(0.6f, 0.35f, 0.12f));
-            screenNav     = Prim.Emissive("Screen Nav", new Color(0.02f, 0.05f, 0.04f), new Color(0.02f, 0.12f, 0.06f));
-            screenEngine  = Prim.Emissive("Screen Engine", new Color(0.03f, 0.04f, 0.08f), new Color(0.05f, 0.1f, 0.25f));
-            screenLine    = Prim.Emissive("Screen Line", Color.white, new Color(1.2f, 1.2f, 1.2f));
-            magenta       = Prim.Emissive("Screen Magenta", new Color(1f, 0.2f, 0.9f), new Color(1.2f, 0.2f, 1f));
-            amber         = Prim.Emissive("Caution Amber", new Color(1f, 0.6f, 0.1f), new Color(2f, 1.1f, 0.1f));
-            buttonGreen   = Prim.Emissive("Button Green", new Color(0.2f, 1f, 0.4f), new Color(0.2f, 1f, 0.35f));
-            pedestalMat   = Prim.Mat("Pedestal", new Color(0.22f, 0.23f, 0.25f), 0.2f, 0.35f);
-            leverKnob     = Prim.Mat("Thrust Lever Knob", new Color(0.85f, 0.85f, 0.85f), 0.3f, 0.6f);
-            pilotSeatMat  = Prim.Mat("Pilot Seat", new Color(0.12f, 0.12f, 0.13f), 0f, 0.2f);
-            stickMat      = Prim.Mat("Sidestick", new Color(0.1f, 0.1f, 0.1f), 0.2f, 0.5f);
         }
 
         // ----------------------------------------------------------------------- cabin
@@ -225,118 +238,6 @@ namespace FlightSim.Build
 
             foreach (float x in new[] { -10f, -6f, -2f, 2f, 5.5f })
                 SceneKit.PointLight(t, "Cabin Light", new Vector3(x, 2.05f, 0f), new Color(1f, 0.93f, 0.82f), 1f, 5f);
-        }
-
-        // --------------------------------------------------------------------- cockpit
-
-        static void Cockpit(Transform k)
-        {
-            float x0 = C.BulkheadX, x1 = C.NoseX, hw = C.CockpitHalfWidth, ceil = C.CockpitCeilingY;
-            float length = x1 - x0, mid = (x0 + x1) * 0.5f;
-
-            Prim.Box(k, "Floor", new Vector3(mid, -0.05f, 0f), new Vector3(length, 0.1f, hw * 2f), cockpitFloor, true);
-            Prim.Box(k, "Ceiling", new Vector3(mid, ceil + 0.05f, 0f), new Vector3(length, 0.1f, hw * 2f), cockpitGrey, true);
-
-            // Side walls, with a side window near the front.
-            const float sideWindowFrom = 9f;
-            foreach (int side in new[] { -1, 1 })
-            {
-                float z = side * (hw + 0.05f);
-                Prim.Box(k, "Side Wall Lower", new Vector3(mid, 0.55f, z), new Vector3(length, 1.1f, 0.1f), cockpitGrey, true);
-                Prim.Box(k, "Side Wall Upper", new Vector3(mid, (1.8f + ceil) * 0.5f, z), new Vector3(length, ceil - 1.8f, 0.1f), cockpitGrey, true);
-                Prim.Box(k, "Side Wall Middle", new Vector3((x0 + sideWindowFrom) * 0.5f, 1.45f, z), new Vector3(sideWindowFrom - x0, 0.7f, 0.1f), cockpitGrey, true);
-                Prim.NoShadow(Prim.Box(k, "Side Window", new Vector3((sideWindowFrom + x1) * 0.5f, 1.45f, z), new Vector3(x1 - sideWindowFrom, 0.7f, 0.02f), glass));
-            }
-
-            // The nose: solid below and above the windscreen.
-            Prim.Box(k, "Nose Below Windscreen", new Vector3(x1 + 0.05f, 0.525f, 0f), new Vector3(0.1f, 1.05f, hw * 2f), cockpitGrey, true);
-            Prim.Box(k, "Nose Above Windscreen", new Vector3(x1 + 0.05f, (1.85f + ceil) * 0.5f, 0f), new Vector3(0.1f, ceil - 1.85f, hw * 2f), cockpitGrey, true);
-            Prim.NoShadow(Prim.Box(k, "Windscreen", new Vector3(x1 + 0.05f, 1.45f, 0f), new Vector3(0.02f, 0.8f, hw * 2f), glass));
-            Prim.Box(k, "Windscreen Centre Post", new Vector3(x1 + 0.03f, 1.45f, 0f), new Vector3(0.08f, 0.8f, 0.08f), cockpitGrey);
-
-            InstrumentPanel(k);
-            ThrustLevers(k);
-
-            foreach (int side in new[] { -1, 1 })
-            {
-                PilotSeat(k, new Vector3(C.PilotSeatX, 0f, side * C.PilotSeatZ));
-
-                // A320s have a sidestick on the outer console instead of a yoke in front of the pilot.
-                Prim.Box(k, "Side Console", new Vector3(8.4f, 0.35f, side * 1.35f), new Vector3(1.2f, 0.7f, 0.4f), pedestalMat);
-                Prim.Cyl(k, "Sidestick", new Vector3(8.6f, 0.8f, side * 1.35f), 0.025f, 0.2f, new Vector3(0f, 0f, -10f), stickMat);
-            }
-
-            // Overhead switch panel with a few lit buttons.
-            Prim.Box(k, "Overhead Panel", new Vector3(9.2f, ceil - 0.05f, 0f), new Vector3(1.6f, 0.08f, 1.2f), panelBlack);
-            for (int i = 0; i < 6; i++)
-                Prim.NoShadow(Prim.Box(k, "Overhead Button", new Vector3(8.7f + i * 0.2f, ceil - 0.1f, (i % 2 == 0 ? -0.3f : 0.3f)),
-                                       new Vector3(0.05f, 0.02f, 0.05f), i == 4 ? amber : buttonGreen));
-
-            SceneKit.PointLight(k, "Cockpit Light", new Vector3(8.4f, 1.9f, 0f), new Color(1f, 0.93f, 0.82f), 0.6f, 3f);
-        }
-
-        /// <summary>
-        /// The main panel, tilted back towards the pilots. The screens are children of a tilted
-        /// pivot, so they sit flat on the panel without each needing its own rotation. Screen
-        /// faces point along local -X, towards the seats.
-        /// </summary>
-        static void InstrumentPanel(Transform k)
-        {
-            Prim.Box(k, "Glareshield", new Vector3(C.PanelX + 0.15f, 1.33f, 0f), new Vector3(0.5f, 0.08f, 2.8f), glareshield);
-
-            var panel = Prim.Empty(k, "Instrument Panel", new Vector3(C.PanelX, 0.98f, 0f), new Vector3(0f, 0f, 18f)).transform;
-            Prim.Box(panel, "Panel Face", Vector3.zero, new Vector3(0.12f, 0.62f, 2.9f), panelBlack);
-
-            foreach (int side in new[] { -1, 1 })
-            {
-                // Primary flight display: the artificial horizon, blue sky over brown ground.
-                float pfd = side * 1.05f;
-                Prim.NoShadow(Prim.Box(panel, "PFD Sky", new Vector3(-0.07f, 0.08f, pfd), new Vector3(0.01f, 0.16f, 0.42f), screenSky));
-                Prim.NoShadow(Prim.Box(panel, "PFD Ground", new Vector3(-0.07f, -0.08f, pfd), new Vector3(0.01f, 0.16f, 0.42f), screenGround));
-                Prim.NoShadow(Prim.Box(panel, "PFD Horizon", new Vector3(-0.076f, 0f, pfd), new Vector3(0.005f, 0.012f, 0.3f), screenLine));
-
-                // Navigation display: dark screen with the planned route in magenta.
-                float nd = side * 0.42f;
-                Prim.NoShadow(Prim.Box(panel, "Nav Display", new Vector3(-0.07f, 0f, nd), new Vector3(0.01f, 0.32f, 0.42f), screenNav));
-                Prim.NoShadow(Prim.Box(panel, "Nav Route", new Vector3(-0.076f, 0.03f, nd), new Vector3(0.005f, 0.2f, 0.012f), magenta));
-                Prim.NoShadow(Prim.Box(panel, "Nav Aircraft", new Vector3(-0.076f, -0.1f, nd), new Vector3(0.005f, 0.02f, 0.06f), amber));
-            }
-
-            // Engine display in the middle.
-            Prim.NoShadow(Prim.Box(panel, "Engine Display", new Vector3(-0.07f, 0f, 0f), new Vector3(0.01f, 0.32f, 0.3f), screenEngine));
-            foreach (float z in new[] { -0.07f, 0.07f })
-                Prim.NoShadow(Prim.Box(panel, "Engine Gauge", new Vector3(-0.076f, 0.07f, z), new Vector3(0.005f, 0.08f, 0.08f), buttonGreen));
-
-            // Master caution light, flashing.
-            SceneKit.Blinker(panel, "Master Caution", new Vector3(-0.08f, 0.26f, -0.75f), 0.035f, amber, Color.black, 0f, 0.5f, 0.5f, 0f);
-        }
-
-        static void ThrustLevers(Transform k)
-        {
-            Vector3 c = C.ThrottleCentre;
-
-            Prim.Box(k, "Pedestal", c + new Vector3(0f, 0.4f, 0f), new Vector3(0.8f, 0.8f, 0.36f), pedestalMat, true);
-            Prim.Box(k, "Pedestal Top", c + new Vector3(0f, 0.82f, 0f), new Vector3(0.8f, 0.05f, 0.36f), new Vector3(0f, 0f, -8f), panelBlack);
-
-            foreach (float z in new[] { -0.07f, 0.07f })
-            {
-                // Tilting around -Z leans the lever forward, towards the nose.
-                Prim.Box(k, "Thrust Lever", c + new Vector3(-0.05f, 0.97f, z), new Vector3(0.04f, 0.26f, 0.035f), new Vector3(0f, 0f, -20f), pedestalMat);
-                Prim.Box(k, "Thrust Lever Knob", c + new Vector3(0f, 1.09f, z), new Vector3(0.07f, 0.05f, 0.06f), leverKnob);
-            }
-
-            Prim.Text3D(k, "Thrust Label", c + new Vector3(-0.41f, 0.62f, 0f), new Vector3(0f, 90f, 0f), "THRUST", 0.008f, Color.white);
-        }
-
-        static void PilotSeat(Transform k, Vector3 pos)
-        {
-            var s = Prim.Empty(k, "Pilot Seat", pos).transform;
-            Prim.Cyl(s, "Column", new Vector3(0f, 0.22f, 0f), 0.12f, 0.44f, Prim.AxisY, pedestalMat);
-            Prim.Box(s, "Cushion", new Vector3(0.05f, 0.48f, 0f), new Vector3(0.5f, 0.1f, 0.5f), pilotSeatMat);
-            Prim.Box(s, "Backrest", new Vector3(-0.24f, 0.9f, 0f), new Vector3(0.1f, 0.8f, 0.5f), new Vector3(0f, 0f, 10f), pilotSeatMat);
-            Prim.Box(s, "Headrest", new Vector3(-0.31f, 1.37f, 0f), new Vector3(0.1f, 0.22f, 0.36f), new Vector3(0f, 0f, 10f), pilotSeatMat);
-            foreach (int side in new[] { -1, 1 })
-                Prim.Box(s, "Armrest", new Vector3(-0.05f, 0.7f, side * 0.27f), new Vector3(0.32f, 0.04f, 0.06f), pedestalMat);
         }
 
         // --------------------------------------------------------------------- outside

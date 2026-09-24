@@ -12,11 +12,14 @@ namespace FlightSim.Build
     ///
     /// It presses Play on scene 1 and walks the player (with PlayerController's autopilot) to
     /// the gate, which also proves the walls and seats leave a way through. Then it boards. In
-    /// the cabin it walks down the aisle and into the cockpit and presses take-off, and checks
-    /// that the "scene 3 isn't built yet" message appears rather than an error.
+    /// the cabin it walks down the aisle and into the cockpit and presses take-off. In scene 3 it
+    /// flies the take-off with Aircraft's autopilot, climbs away, looks at the plane from the
+    /// outside camera, and begins the approach. In scene 4 it watches the landing all the way to
+    /// the arrival card.
     ///
     /// It FAILS if there is any runtime error, if the player gets stuck, if a zone can't be
-    /// reached, or if a scene never loads. Screenshots land in Playtest/.
+    /// reached, if a scene never loads, if the plane never leaves the ground or crashes, or if the
+    /// landing never finishes. Screenshots land in Playtest/.
     ///
     /// Domain reload is switched off for the run, otherwise entering play mode would wipe the
     /// static variables that remember how far the test has got.
@@ -24,17 +27,33 @@ namespace FlightSim.Build
     public static class Playtest
     {
         const string OutputDir = "Playtest";
-        const float GiveUpSeconds = 180f;            // game time
-        const float RealTimeLimitSeconds = 1500f;    // wall-clock safety net
+
+        // Game time. The walk takes about a minute, the climb another forty seconds and the
+        // scripted landing nearly a minute, so the whole run is a few minutes of game time.
+        const float GiveUpSeconds = 420f;
+        const float RealTimeLimitSeconds = 2700f;    // wall-clock safety net
         const float StuckSeconds = 25f;
 
-        enum Phase { WaitForTerminal, WalkTerminal, WaitForCabin, WalkCabin, WaitForMessage }
+        /// <summary>How high the autopilot climbs before it starts the approach.</summary>
+        const float ClimbToAltitude = FlightLayout.Flight.LandingPromptAltitude + 60f;
+
+        enum Phase
+        {
+            WaitForTerminal, WalkTerminal,
+            WaitForCabin, WalkCabin,
+            WaitForFlight, FlyTakeoff,
+            WaitForLanding, WatchLanding
+        }
 
         static Phase phase;
         static int waypoint;
         static bool walking;
         static float startTime, stepStart, phaseStart;
         static bool started, finished, batch;
+
+        // Screenshots that should only be taken the first time their moment arrives.
+        static bool shotAirborne, shotChase, shotTouchdown;
+
         static readonly List<string> errors = new List<string>();
         static readonly HashSet<string> scenesSeen = new HashSet<string>();
 
@@ -54,6 +73,9 @@ namespace FlightSim.Build
             walking = false;
             started = false;
             finished = false;
+            shotAirborne = false;
+            shotChase = false;
+            shotTouchdown = false;
             errors.Clear();
             scenesSeen.Clear();
 
@@ -142,23 +164,140 @@ namespace FlightSim.Build
                     if (Walk(FlightLayout.Cabin.PlaytestRoute, "2", now))
                     {
                         Capture("2_in_cockpit");
-                        if (UseZone("take-off")) Next(Phase.WaitForMessage, now);
+                        if (UseZone("take-off")) Next(Phase.WaitForFlight, now);
                     }
                     break;
 
-                case Phase.WaitForMessage:
-                    var hud = PromptHUD.Instance;
-                    if (hud != null && hud.CurrentMessage != null && hud.CurrentMessage.Contains("scene 3"))
+                case Phase.WaitForFlight:
+                    if (active == FlightLayout.TakeoffScene && Plane() != null && now - phaseStart > 2.5f)
                     {
-                        Debug.Log("[Playtest] Take-off showed: \"" + hud.CurrentMessage + "\"");
-                        Finish();
+                        Capture("3_on_the_runway");
+
+                        // Full power, and aim for a steady climb once the wheels are up.
+                        Plane().Autopilot(1f, 12f);
+                        Next(Phase.FlyTakeoff, now);
                     }
-                    else if (now - phaseStart > 5f)
+                    else if (now - phaseStart > 15f)
                     {
-                        Fail("Pressed take-off, but the 'scene 3 not built yet' message never appeared");
+                        Fail("Pressed take-off, but the flight scene never loaded");
                     }
                     break;
+
+                case Phase.FlyTakeoff:
+                    FlyTakeoff(now);
+                    break;
+
+                case Phase.WaitForLanding:
+                    if (active == FlightLayout.LandingScene && LandingSequence.Instance != null && now - phaseStart > 2.5f)
+                    {
+                        Capture("4_on_approach");
+                        Next(Phase.WatchLanding, now);
+                    }
+                    else if (now - phaseStart > 15f)
+                    {
+                        Fail("Began the approach, but the landing scene never loaded");
+                    }
+                    break;
+
+                case Phase.WatchLanding:
+                    WatchLanding(now);
+                    break;
             }
+        }
+
+        /// <summary>
+        /// Flies the take-off and the climb. It checks the things that actually prove the flight
+        /// model works: the plane leaves the ground, the wheels come up, and it gains height.
+        /// </summary>
+        static void FlyTakeoff(float now)
+        {
+            var plane = Plane();
+            if (plane == null)
+            {
+                Fail("The aeroplane disappeared during the take-off");
+                return;
+            }
+
+            if (plane.Crashed)
+            {
+                Fail("The plane crashed during the automated take-off");
+                return;
+            }
+
+            // A few snapshots along the way, each taken once.
+            if (!plane.OnGround && !shotAirborne)
+            {
+                shotAirborne = true;
+                Capture("3_airborne");
+            }
+
+            if (plane.Altitude > 150f && !shotChase)
+            {
+                shotChase = true;
+
+                // Prove the outside camera works, then go back to the pilot's seat.
+                if (FlightCamera.Instance != null)
+                {
+                    FlightCamera.Instance.Toggle();
+                    Capture("3_chase_view");
+                    FlightCamera.Instance.Toggle();
+                }
+            }
+
+            if (plane.Altitude > ClimbToAltitude)
+            {
+                Capture("3_climbing_away");
+
+                if (!plane.ReadyToLand)
+                {
+                    Fail("Climbed to " + Mathf.RoundToInt(plane.Altitude) +
+                         " m but the landing prompt never became available (gear down: " + plane.GearDown + ")");
+                    return;
+                }
+
+                Debug.Log("[Playtest] Beginning the approach");
+                SceneFader.GoTo(FlightLayout.LandingScene, null);
+                Next(Phase.WaitForLanding, now);
+                return;
+            }
+
+            // The take-off roll and climb have a generous but finite budget.
+            if (now - phaseStart > 120f)
+            {
+                Fail("Ran out of time climbing: altitude " + Mathf.RoundToInt(plane.Altitude) +
+                     " m, speed " + Mathf.RoundToInt(plane.Knots) + " kt, on the ground: " + plane.OnGround);
+            }
+        }
+
+        /// <summary>Watches the scripted landing through to the arrival card.</summary>
+        static void WatchLanding(float now)
+        {
+            var sequence = LandingSequence.Instance;
+            if (sequence == null)
+            {
+                Fail("The landing sequence disappeared");
+                return;
+            }
+
+            if (sequence.Current == LandingSequence.Stage.RollOut && !shotTouchdown)
+            {
+                shotTouchdown = true;
+                Capture("4_touchdown");
+            }
+
+            if (EndCard.Instance != null && EndCard.Instance.Showing)
+            {
+                Capture("4_arrived");
+                Debug.Log("[Playtest] The landing finished and the arrival card appeared");
+                Finish();
+                return;
+            }
+
+            float budget = FlightLayout.Landing.DescentSeconds + FlightLayout.Landing.FlareSeconds +
+                           FlightLayout.Landing.RollOutSeconds + FlightLayout.Landing.EndCardDelay + 30f;
+
+            if (now - phaseStart > budget)
+                Fail("The landing never reached the arrival card - it stopped at stage " + sequence.Current);
         }
 
         static void Next(Phase p, float now)
@@ -172,6 +311,11 @@ namespace FlightSim.Build
         static PlayerController Player()
         {
             return Object.FindFirstObjectByType<PlayerController>();
+        }
+
+        static Aircraft Plane()
+        {
+            return Object.FindFirstObjectByType<Aircraft>();
         }
 
         /// <summary>Walks the route one point at a time. Returns true once the last point is reached.</summary>
@@ -268,7 +412,8 @@ namespace FlightSim.Build
             }
             else
             {
-                Debug.Log("[Playtest] PASSED - boarded, walked the cabin, reached the cockpit, no errors.");
+                Debug.Log("[Playtest] PASSED - boarded, walked the cabin, took off, climbed away, " +
+                          "landed and arrived, no errors.");
             }
 
             EditorApplication.ExitPlaymode();
