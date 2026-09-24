@@ -18,6 +18,7 @@ namespace FlightSim.Build
     public static class Prim
     {
         public const string MaterialDir = "Assets/Materials";
+        public const string TextureDir = "Assets/Textures";
 
         /// <summary>Cylinder rotations, named by the world axis the cylinder ends up lying along.</summary>
         public static readonly Vector3 AxisX = new Vector3(0f, 0f, 90f);
@@ -49,6 +50,31 @@ namespace FlightSim.Build
         public static Material Glass(string name, Color tint)
         {
             return Build(name, tint, 0f, 0.9f, null, true);
+        }
+
+        /// <summary>
+        /// A surface with a picture on it, loaded from Assets/Textures.
+        ///
+        /// This is the only textured material in the project - everything else is a flat colour -
+        /// and it exists so the pilot can have a real photograph for a face.
+        ///
+        /// If the picture is missing the material still works, it just comes out plain. That
+        /// matters because the scenes are generated: a missing file should leave you with a
+        /// blank-faced pilot and a warning, not a build that stops halfway through.
+        /// </summary>
+        public static Material Textured(string name, string textureFile, Color tint)
+        {
+            var m = Mat(name, tint, 0f, 0.1f);
+
+            string path = TextureDir + "/" + textureFile;
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+
+            if (tex == null)
+                Debug.LogWarning("[Flight Sim] No picture at " + path + " - '" + name + "' will be plain");
+
+            m.mainTexture = tex;
+            EditorUtility.SetDirty(m);
+            return m;
         }
 
         static Material Build(string name, Color albedo, float metallic, float smoothness, Color? emission, bool transparent)
@@ -168,6 +194,23 @@ namespace FlightSim.Build
             return Spawn(PrimitiveType.Capsule, parent, name, pos,
                          new Vector3(diameter, height * 0.5f, diameter),
                          Quaternion.identity, mat, false);
+        }
+
+        /// <summary>
+        /// A flat rectangle carrying a picture.
+        ///
+        /// The heads in this game are spheres, and a photograph wrapped around a sphere smears
+        /// badly at the edges, so the photo goes on a flat card sitting just in front of the face
+        /// instead. It reads well head-on, which is how you meet the pilot, and is obviously flat
+        /// from the side - an accepted trade for keeping everything built from Unity's own shapes.
+        ///
+        /// Unity's Quad faces -Z, so it is turned to face +Z here: that is the direction every
+        /// figure in Figures.cs is built looking along.
+        /// </summary>
+        public static GameObject Picture(Transform parent, string name, Vector3 pos, float width, float height, Material mat)
+        {
+            return Spawn(PrimitiveType.Quad, parent, name, pos, new Vector3(width, height, 1f),
+                         Quaternion.Euler(0f, 180f, 0f), mat, false);
         }
 
         public static GameObject Empty(Transform parent, string name, Vector3 pos)

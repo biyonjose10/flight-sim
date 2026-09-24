@@ -94,6 +94,103 @@ namespace FlightSim.Build
             return root.gameObject;
         }
 
+        /// <summary>
+        /// A pilot sitting at the controls: the same build as a seated passenger, but in a white
+        /// uniform with shoulder boards, wearing a headset, with both arms reaching forward to the
+        /// controls instead of folded in a lap.
+        ///
+        /// If a picture file is given, it is used for the face. Pass null for a plain-faced crew
+        /// member.
+        /// </summary>
+        /// <param name="headYaw">
+        /// How far the head is turned from straight ahead, in degrees. This matters more than it
+        /// sounds: you enter the cockpit from behind, so a pilot looking dead ahead shows you
+        /// nothing but the back of his skull. Turning the head towards the other seat means he is
+        /// glancing over at you, which is both what a captain does when someone comes in and the
+        /// only angle a flat photographed face actually reads from.
+        /// </param>
+        public static GameObject Pilot(Transform parent, string name, Vector3 seatPos, float yaw,
+                                       string faceTexture, float headYaw)
+        {
+            var uniform = Prim.Mat("Pilot Uniform", new Color(0.93f, 0.94f, 0.96f), 0f, 0.2f);
+            var darks = Prim.Mat("Pilot Blues", new Color(0.11f, 0.13f, 0.2f));
+            var skin = Prim.Mat("Skin 2", Skins[2], 0f, 0.35f);
+            var hair = Prim.Mat("Hair 0", Hairs[0], 0f, 0.15f);
+            var headset = Prim.Mat("Headset", new Color(0.07f, 0.07f, 0.08f), 0.2f, 0.3f);
+
+            var root = Prim.Empty(parent, name, seatPos, new Vector3(0f, yaw, 0f)).transform;
+
+            Prim.Box(root, "Thighs", new Vector3(0f, 0.54f, 0.1f), new Vector3(0.34f, 0.14f, 0.42f), darks);
+            Prim.Box(root, "Shins", new Vector3(0f, 0.25f, 0.3f), new Vector3(0.3f, 0.48f, 0.12f), darks);
+            Prim.Box(root, "Shoes", new Vector3(0f, 0.04f, 0.37f), new Vector3(0.3f, 0.08f, 0.22f),
+                     Prim.Mat("Shoes", new Color(0.1f, 0.1f, 0.1f)));
+            Prim.Capsule(root, "Torso", new Vector3(0f, 0.9f, -0.06f), 0.38f, 0.66f, uniform);
+            Prim.Box(root, "Tie", new Vector3(0f, 0.97f, 0.14f), new Vector3(0.045f, 0.2f, 0.03f), darks);
+            Prim.Cyl(root, "Neck", new Vector3(0f, 1.19f, -0.04f), 0.055f, 0.14f, Prim.AxisY, skin);
+
+            foreach (int side in new[] { -1, 1 })
+            {
+                // Leaning forward towards the sidestick and the thrust levers.
+                Prim.Box(root, "Arm", new Vector3(side * 0.21f, 0.84f, 0.12f),
+                         new Vector3(0.09f, 0.42f, 0.11f), new Vector3(-58f, 0f, 0f), uniform);
+                Prim.Box(root, "Shoulder Board", new Vector3(side * 0.17f, 1.13f, -0.03f),
+                         new Vector3(0.11f, 0.03f, 0.13f), darks);
+            }
+
+            var head = PilotHead(root, new Vector3(0f, 1.33f, -0.04f), skin, hair, headset, faceTexture);
+            head.localRotation = Quaternion.Euler(0f, headYaw, 0f);
+
+            // A pilot watching the runway barely moves their head, so the glance is small and slow.
+            var idle = root.gameObject.AddComponent<PassengerIdle>();
+            idle.head = head;
+            idle.lookAngle = 9f;
+            idle.lookSpeed = 0.17f;
+            idle.phase = 1.1f;
+
+            return root.gameObject;
+        }
+
+        /// <summary>
+        /// The pilot's head: skull, hair, headset, and a photograph on a flat card where the face
+        /// goes. The nose is deliberately left off - a 3D nose poking out of a photographed face
+        /// looks wrong.
+        /// </summary>
+        static Transform PilotHead(Transform root, Vector3 pos, Material skin, Material hair,
+                                   Material headsetMat, string faceTexture)
+        {
+            var pivot = Prim.Empty(root, "Head", pos).transform;
+
+            Prim.Sphere(pivot, "Skull", Vector3.zero, Vector3.one * 0.23f, skin);
+            Prim.Sphere(pivot, "Hair", new Vector3(0f, 0.04f, -0.03f), new Vector3(0.235f, 0.2f, 0.22f), hair);
+
+            // Headset: a band over the top and a cup on each ear.
+            Prim.Box(pivot, "Headset Band", new Vector3(0f, 0.12f, -0.01f), new Vector3(0.24f, 0.03f, 0.05f), headsetMat);
+            foreach (int side in new[] { -1, 1 })
+                Prim.Box(pivot, "Ear Cup", new Vector3(side * 0.115f, 0.01f, -0.01f),
+                         new Vector3(0.04f, 0.09f, 0.09f), headsetMat);
+
+            Prim.Box(pivot, "Mic Boom", new Vector3(-0.1f, -0.05f, 0.05f), new Vector3(0.02f, 0.02f, 0.13f),
+                     new Vector3(0f, 25f, 0f), headsetMat);
+
+            if (!string.IsNullOrEmpty(faceTexture))
+            {
+                // Deliberately smaller than the skull. Sized to match it, the photo covers the head
+                // completely and the figure reads as a cutout on a snowman; leaving a margin means
+                // the skull and hair frame the face the way a real head does.
+                //
+                // It also sits just clear of the sphere - at the same radius the two would fight
+                // for the same pixels and flicker.
+                var faceMat = Prim.Textured("Pilot Face", faceTexture, Color.white);
+                Prim.NoShadow(Prim.Picture(pivot, "Face", new Vector3(0f, -0.012f, 0.118f), 0.135f, 0.202f, faceMat));
+            }
+            else
+            {
+                Prim.Box(pivot, "Nose", new Vector3(0f, -0.01f, 0.115f), new Vector3(0.04f, 0.05f, 0.04f), skin);
+            }
+
+            return pivot;
+        }
+
         static Transform Head(Transform root, Vector3 pos, Material skin, Material hair)
         {
             var pivot = Prim.Empty(root, "Head", pos).transform;

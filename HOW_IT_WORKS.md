@@ -221,6 +221,26 @@ class holding the journey time — static rather than a component, because every
 own objects when the next one loads, while a static value belongs to the program and simply carries
 on.
 
+### The captain, and the photograph for a face
+
+`Figures.Pilot` builds him from the same shapes as everyone else - capsule torso, box limbs, sphere
+head - in a uniform with a headset, arms reaching forward to the controls.
+
+The face is the one textured thing in the entire project. Everything else is a flat colour. A
+photograph cannot be wrapped around a sphere without smearing badly at the edges, so instead
+`Prim.Picture` puts it on a **flat card** (a Quad) sitting just clear of the front of the skull.
+Two details matter:
+
+- The card is **smaller than the skull on purpose**. Sized to match, the photo covers the head
+  completely and he reads as a cutout stuck on a snowman; leaving a margin lets the skull and hair
+  frame the face the way a real head does.
+- **His head is turned towards the other seat.** You come into the cockpit from behind, so a pilot
+  looking straight ahead would show you nothing but the back of his head. The turn is also the only
+  angle a flat face really works from.
+
+If the picture file is missing he still builds - he just gets a plain face and the Console says so.
+The scenes are generated, so a missing file has to be a warning, not a broken build.
+
 ### `AircraftAudio`, `Ambience`, `Footsteps`
 
 `AircraftAudio` invents nothing: it watches `Aircraft` and turns those numbers into volume and

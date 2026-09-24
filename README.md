@@ -102,7 +102,9 @@ packs** to download: every object is built from Unity's own shapes.
 5. Press **E**. The screen fades to black and **scene 2** loads.
 6. You're just inside the plane's door, looking at the galley and the open **FLIGHT DECK** door.
    Turn round to see the cabin: 20 rows of 3+3 seats, passengers, and the wings through the windows.
-7. Walk through the cockpit door and stand between the two pilot seats.
+7. Walk through the cockpit door and stand between the two pilot seats. **The captain is sitting
+   in the left-hand one**, in uniform and a headset, and turns to look at you as you come in. The
+   right-hand seat is empty, because that one is yours.
    **Press E to take off** appears.
 8. Press **E**. The screen fades and **scene 3** loads: you are in the same cockpit, but now lined
    up on the runway with the engines idling and the world stretching away in front of you.
@@ -238,6 +240,11 @@ git reset --hard working-v1     # back to a known good state
   style. There are no imported models, so nothing needs downloading, but nothing is photo-realistic either.
 - **The countryside is scenery only.** Fields, roads, towers and clouds have no colliders - you can
   fly straight through a cloud or a tower block. Only the ground ends a flight.
+- **The captain's face is a photograph on a flat card.** Every head in the game is a sphere, and a
+  photo wrapped around a sphere smears at the edges, so his face sits on a flat rectangle on the
+  front of his head. It reads properly from your seat, which is the angle you actually see him
+  from, and is obviously flat if you get side-on to it. His head is turned towards your seat on
+  purpose - looking dead ahead he would show you nothing but the back of his skull.
 - **The passengers don't walk.** They sit or stand, and turn their heads now and then.
 - **The plane in scene 2 is lined up at the start of the runway** (so the windscreen looks down
   it) while also being connected to the jet bridge. A real plane is towed away from the gate first. It's a

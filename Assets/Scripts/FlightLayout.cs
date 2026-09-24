@@ -134,6 +134,15 @@ namespace FlightSim
             // The cockpit.
             public const float PilotSeatX = 8.2f;
             public const float PilotSeatZ = 0.7f;
+
+            /// <summary>
+            /// Which side the captain sits on: +1 is the +Z seat, -1 is the -Z seat.
+            ///
+            /// The captain takes one seat and YOU take the other, which is why the flying scenes
+            /// put your viewpoint in a seat rather than hovering between them. Flip this and the
+            /// pilot and the player swap places.
+            /// </summary>
+            public const int CaptainSide = 1;
             public const float PanelX = 9.6f;
             public static readonly Vector3 ThrottleCentre = new Vector3(8.9f, 0f, 0f);
 
@@ -184,8 +193,16 @@ namespace FlightSim
             /// </summary>
             public static readonly Vector3 CockpitOffset = new Vector3(7.6f, -1.1f, 0f);
 
-            /// <summary>The pilot's eye, relative to the middle of the fuselage.</summary>
-            public static readonly Vector3 EyeLocal = new Vector3(15.8f, 0.15f, 0f);
+            /// <summary>
+            /// Your eye, relative to the middle of the fuselage.
+            ///
+            /// You sit in the seat the captain is NOT in, at the same height as their head, so
+            /// they are beside you for the whole flight. Sitting in a seat rather than hovering
+            /// on the centreline is also just what a pilot's view looks like: the panel is
+            /// slightly off to one side.
+            /// </summary>
+            public static readonly Vector3 EyeLocal =
+                new Vector3(15.8f, 0.23f, -Cabin.CaptainSide * Cabin.PilotSeatZ);
 
             /// <summary>
             /// How far the model has to be turned inside the aeroplane to point where it is going.

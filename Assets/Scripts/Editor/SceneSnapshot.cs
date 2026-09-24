@@ -43,18 +43,27 @@ namespace FlightSim.Build
             new View(FlightLayout.CabinScene, "2c_cockpit", new Vector3(7.4f, 1.6f, 0f),     new Vector3(10f, 90f, 0f)),
             new View(FlightLayout.CabinScene, "2d_window",  new Vector3(-0.6f, 1.7f, -0.1f), new Vector3(18f, -155f, 0f)),
 
+            // The captain from where you actually stand when you walk into the cockpit - between
+            // the two seats - rather than from in front of him, which is somewhere you can never
+            // get to. Judging the face from an impossible camera is how you end up "fixing"
+            // something that was already right.
+            new View(FlightLayout.CabinScene, "2e_captain", new Vector3(8.2f, 1.65f, 0f), new Vector3(24f, -5f, 0f)),
+
             // Scene 3: the plane on the threshold from outside and from the pilot's seat, the
             // airfield from the air, and the coast you fly out towards.
             // Straight down the runway from behind, which is also the only angle the painted
             // runway number reads from - it is meant for a pilot rolling towards it, not for
             // someone standing beside it.
             new View(FlightLayout.TakeoffScene, "3a_on_the_runway",  new Vector3(-1335f, 26f, 0f),  new Vector3(11f, 90f, 0f)),
-            new View(FlightLayout.TakeoffScene, "3b_pilot_seat",     new Vector3(-1164.2f, 4f, 0f),  new Vector3(2f, 90f, 0f)),
+            // Your seat is now the one the captain is NOT in, so these sit 0.7 m off the
+            // centreline. He is on the left, which is why 3e looks that way.
+            new View(FlightLayout.TakeoffScene, "3b_pilot_seat",     new Vector3(-1164.2f, 4.08f, -0.7f), new Vector3(2f, 90f, 0f)),
+            new View(FlightLayout.TakeoffScene, "3e_captain_beside", new Vector3(-1164.2f, 4.08f, -0.7f), new Vector3(4f, 36f, 0f)),
             new View(FlightLayout.TakeoffScene, "3c_airfield",       new Vector3(-1500f, 620f, -820f), new Vector3(26f, 47f, 0f)),
             new View(FlightLayout.TakeoffScene, "3d_coast",          new Vector3(2600f, 1050f, 0f),  new Vector3(11f, 90f, 0f)),
 
             // Scene 4: final approach, from the seat and from outside.
-            new View(FlightLayout.LandingScene, "4a_approach_seat",  new Vector3(-3762.2f, 184f, 0f), new Vector3(4f, 90f, 0f)),
+            new View(FlightLayout.LandingScene, "4a_approach_seat",  new Vector3(-3762.2f, 184.08f, -0.7f), new Vector3(4f, 90f, 0f)),
             new View(FlightLayout.LandingScene, "4b_approach_chase", new Vector3(-3860f, 212f, -85f), new Vector3(11f, 58f, 0f))
         };
 

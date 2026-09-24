@@ -84,6 +84,21 @@ is the one airfield (scenes 3 and 4). Do not copy geometry into a scene builder.
 - **Runway numbers only read correctly from straight down the runway.** Judge
   `Snapshots/3a_on_the_runway.png`, not an oblique view - seen from the side, "09" looks like "60"
   whatever the rotation actually is, and "fixing" it from that angle breaks a correct value.
+- **Judge anything visual from a camera the player can actually reach.** The captain looked wrong
+  from a snapshot placed in front of his face - a spot no player can stand in. From between the
+  seats, where you really are, he was fine. Same class of mistake as the runway numbers.
+- **The captain's head is turned ~52° towards the empty seat on purpose.** You enter the cockpit
+  from behind; facing forward he shows you the back of his skull and the photographed face is never
+  seen. The face card is also deliberately smaller than the skull, so head and hair frame it.
+- **`Prim.Textured` is the only textured material in the project.** It loads from
+  `Assets/Textures/` and degrades to a plain colour with a warning if the file is missing, because
+  the scenes are build output and a missing asset must not stop a build.
+- **Snapshot cameras are fixed world positions.** Moving something in `FlightLayout` (the pilot's
+  eye, for instance) does not move them - update `SceneSnapshot` too, or you will review a stale
+  viewpoint and think nothing changed.
+- **Edits can land after a background build has already started.** Twice a "fix" appeared not to
+  work because the build read the old file. Check the built scene actually contains the change
+  (`grep m_Name:` in the `.unity`) before concluding the fix was wrong.
 
 ## Verifying a change
 

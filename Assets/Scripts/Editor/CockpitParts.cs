@@ -170,6 +170,8 @@ namespace FlightSim.Build
                 Prim.Cyl(k, "Sidestick", new Vector3(8.6f, 0.8f, side * 1.35f), 0.025f, 0.2f, new Vector3(0f, 0f, -10f), stickMat);
             }
 
+            Captain(k);
+
             // Overhead switch panel with a few lit buttons.
             Prim.Box(k, "Overhead Panel", new Vector3(9.2f, ceil - 0.05f, 0f), new Vector3(1.6f, 0.08f, 1.2f), panelBlack);
             for (int i = 0; i < 6; i++)
@@ -350,6 +352,25 @@ namespace FlightSim.Build
         }
 
         /// <summary>One pilot's seat: a pedestal, a cushion, a reclined back and two armrests.</summary>
+        /// <summary>
+        /// The captain, sitting in one of the two seats with a photograph for a face.
+        ///
+        /// He is built here, in the shared cockpit, rather than in any one scene's builder, so he
+        /// is in the same seat in all three scenes that use this cockpit: you meet him in scene 2,
+        /// and he is still beside you through the take-off and the landing.
+        ///
+        /// The figures in Figures.cs are built facing +Z, and the seats face the nose at +X, so he
+        /// is turned a quarter turn to face forward.
+        /// </summary>
+        static void Captain(Transform k)
+        {
+            // The head turn is towards the other seat - yours - so he is looking across at you
+            // rather than showing you the back of his head as you walk in.
+            Figures.Pilot(k, "Captain",
+                          new Vector3(C.PilotSeatX - 0.06f, 0f, C.CaptainSide * C.PilotSeatZ),
+                          90f, "pilot_face.png", C.CaptainSide * 52f);
+        }
+
         static void PilotSeat(Transform k, Vector3 pos)
         {
             var s = Prim.Empty(k, "Pilot Seat", pos).transform;
