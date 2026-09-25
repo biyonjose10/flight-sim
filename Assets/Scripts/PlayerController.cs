@@ -99,8 +99,17 @@ namespace FlightSim
             {
                 yaw += Input.GetAxis("Mouse X") * mouseSensitivity;
                 pitch -= Input.GetAxis("Mouse Y") * mouseSensitivity;
-                pitch = Mathf.Clamp(pitch, -maxLookUpDown, maxLookUpDown);
             }
+
+            // On a phone there is no mouse, so a finger dragged across the screen turns the view
+            // instead. Both are added rather than chosen between, so one build works with either.
+            if (inputEnabled && !hasAutopilotTarget)
+            {
+                yaw += VirtualInput.LookDelta.x;
+                pitch -= VirtualInput.LookDelta.y;
+            }
+
+            pitch = Mathf.Clamp(pitch, -maxLookUpDown, maxLookUpDown);
 
             transform.rotation = Quaternion.Euler(0f, yaw, 0f);
 
@@ -137,8 +146,10 @@ namespace FlightSim
             else if (inputEnabled)
             {
                 // GetAxisRaw gives -1, 0 or 1 straight from the keys (A/D and W/S, or the arrows).
-                float right = Input.GetAxisRaw("Horizontal");
-                float forward = Input.GetAxisRaw("Vertical");
+                // The on-screen pad adds to the same two numbers, so a phone and a keyboard drive
+                // exactly the same code.
+                float right = Mathf.Clamp(Input.GetAxisRaw("Horizontal") + VirtualInput.Strafe, -1f, 1f);
+                float forward = Mathf.Clamp(Input.GetAxisRaw("Vertical") + VirtualInput.Move, -1f, 1f);
 
                 move = transform.right * right + transform.forward * forward;
 

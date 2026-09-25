@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 
@@ -113,6 +114,98 @@ namespace FlightSim.Build
 
             var report = BuildPipeline.BuildPlayer(options);
             Debug.Log("[Flight Sim] Player build " + report.summary.result + " -> " + options.locationPathName);
+        }
+
+        // ------------------------------------------------------------------------- android
+
+        // Where the Android tools live on this machine. Unity's Android module was installed
+        // without its own copies, so it borrows the ones Android Studio already put here.
+        const string AndroidSdk = @"C:\Users\biyon\AppData\Local\Android\Sdk";
+        const string AndroidJdk = @"C:\Program Files\Android\Android Studio\jbr";
+
+        [MenuItem("Tools/Flight Sim/Build Android APK", priority = 81)]
+        public static void BuildAndroidApk()
+        {
+            AddScenesToBuildSettings();
+            ApplyAndroidSettings();
+
+            EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
+
+            Directory.CreateDirectory("Build");
+
+            var options = new BuildPlayerOptions
+            {
+                scenes = Scenes.Select(SceneKit.ScenePath).ToArray(),
+                locationPathName = "Build/FlightSim.apk",
+                target = BuildTarget.Android,
+                options = BuildOptions.None
+            };
+
+            var report = BuildPipeline.BuildPlayer(options);
+            var summary = report.summary;
+
+            Debug.Log(string.Format("[Flight Sim] Android build {0} -> {1} ({2:0.0} MB, {3} errors)",
+                                    summary.result, options.locationPathName,
+                                    summary.totalSize / (1024f * 1024f), summary.totalErrors));
+        }
+
+        /// <summary>
+        /// The Android settings that matter, set from code so they are written down rather than
+        /// living invisibly in a settings window.
+        ///
+        /// **Mono, and 32-bit ARM.** Unity's other scripting backend, IL2CPP, is what you need for
+        /// a 64-bit build, but it compiles through the Android NDK - and the NDK on this machine
+        /// (r27) is not the version this Unity expects (r23b), so IL2CPP cannot run. Mono needs no
+        /// NDK at all. The cost is that the APK is armeabi-v7a only: it runs on the great majority
+        /// of phones, because 64-bit Android devices almost all still support 32-bit apps, but it
+        /// will refuse to install on a 64-bit-only device. Installing NDK r23b would lift that.
+        /// </summary>
+        static void ApplyAndroidSettings()
+        {
+            EditorPrefs.SetBool("SdkUseEmbedded", false);
+            EditorPrefs.SetString("AndroidSdkRoot", AndroidSdk);
+            EditorPrefs.SetBool("JdkUseEmbedded", false);
+            EditorPrefs.SetString("JdkPath", AndroidJdk);
+
+            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "com.biyonjose.flightsim");
+            PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.Mono2x);
+            PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARMv7;
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel23;
+            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevelAuto;
+
+            // A flight sim is unplayable in portrait, and the on-screen buttons are laid out for a
+            // wide screen.
+            PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
+            PlayerSettings.allowedAutorotateToPortrait = false;
+            PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
+            PlayerSettings.allowedAutorotateToLandscapeLeft = true;
+            PlayerSettings.allowedAutorotateToLandscapeRight = true;
+
+            PlayerSettings.companyName = "Biyon";
+            PlayerSettings.productName = "Flight Sim";
+            PlayerSettings.bundleVersion = "1.0";
+            PlayerSettings.Android.bundleVersionCode = 1;
+
+            EditorUserBuildSettings.buildAppBundle = false;   // a plain .apk you can sideload
+            EditorUserBuildSettings.androidBuildSubtarget = MobileTextureSubtarget.ASTC;
+        }
+
+        /// <summary>Command-line entry point for the APK. Exit code 1 if it fails.</summary>
+        public static void BatchBuildAndroid()
+        {
+            int code = 0;
+            try
+            {
+                BuildAndroidApk();
+                if (!File.Exists("Build/FlightSim.apk")) code = 1;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("[Flight Sim] Android build failed: " + e);
+                code = 1;
+            }
+
+            if (Application.isBatchMode) EditorApplication.Exit(code);
         }
 
         /// <summary>

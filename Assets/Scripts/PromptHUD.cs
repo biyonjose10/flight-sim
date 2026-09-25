@@ -24,7 +24,9 @@ namespace FlightSim
         [Header("Controls hint (top left)")]
         [Tooltip("The keys this scene uses. The walking scenes and the flying scenes need different ones.")]
         public string controlsHint = "WASD walk    Mouse look    E use    Esc free cursor";
-        public float controlsHintSeconds = 12f;
+
+        [Tooltip("How long the hint stays on screen. 0 or less means it never goes away.")]
+        public float controlsHintSeconds = 0f;
 
         Interactable promptOwner;   // whoever is currently showing a prompt
         string promptText;
@@ -95,7 +97,12 @@ namespace FlightSim
                 GUI.color = Color.white;
             }
 
-            if (since < controlsHintSeconds && !string.IsNullOrEmpty(controlsHint))
+            // The hint stays up for good by default. It is the only thing telling you which keys
+            // do what, and having it fade out a few seconds in means anyone who looks away at the
+            // wrong moment never finds out how to fly the plane.
+            bool showHint = controlsHintSeconds <= 0f || since < controlsHintSeconds;
+
+            if (showHint && !string.IsNullOrEmpty(controlsHint))
             {
                 var hint = new Rect(16f, 16f, h * 0.78f, h * 0.045f);
                 DrawBox(hint, new Color(0f, 0f, 0f, 0.45f));

@@ -367,20 +367,22 @@ namespace FlightSim
         /// </summary>
         public static class Landing
         {
-            public const float ApproachSpeed = 72f;
-            public const float TouchdownSpeed = 66f;
+            public const float ApproachSpeed = 82f;
+            public const float TouchdownSpeed = 74f;
 
             /// <summary>Where the wheels are meant to meet the tarmac.</summary>
             public const float TouchdownX = World.ThresholdX + 330f;
 
             /// <summary>How high the approach begins, above the wheels' resting height.</summary>
-            public const float StartAltitude = 180f;
+            public const float StartAltitude = 120f;
 
-            // The timeline.
-            public const float DescentSeconds = 36f;   // a steady glide down to the flare
-            public const float FlareSeconds = 3f;      // nose comes up, the sink rate washes off
-            public const float RollOutSeconds = 13f;   // reverse thrust and brakes, down to a stop
-            public const float EndCardDelay = 1.5f;    // a breath after stopping, then the card
+            // The timeline. Deliberately brisk: the landing is watched rather than flown, and a
+            // long glide with nothing to do is dull to sit through and worse to demonstrate.
+            // The whole thing now runs in about half a minute.
+            public const float DescentSeconds = 15f;   // a steady glide down to the flare
+            public const float FlareSeconds = 2.5f;    // nose comes up, the sink rate washes off
+            public const float RollOutSeconds = 7f;    // reverse thrust and brakes, down to a stop
+            public const float EndCardDelay = 1f;      // a breath after stopping, then the card
 
             /// <summary>
             /// Where the approach starts, worked out from the numbers above rather than typed in.

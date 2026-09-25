@@ -179,6 +179,36 @@ Everything lives under **Tools → Flight Sim**:
 | **Snapshot Scenes** | Saves 14 pictures of the four scenes to `Snapshots/` |
 | **Playtest** | Plays the whole game by itself, start to finish, and reports PASSED or FAILED |
 | **Build Windows Player** | Writes `Build/FlightSim/FlightSim.exe` |
+| **Build Android APK** | Writes `Build/FlightSim.apk` to sideload onto a phone |
+
+---
+
+## On a phone
+
+**Tools → Flight Sim → Build Android APK** writes `Build/FlightSim.apk`. Copy it to your phone and
+open it (you'll have to allow installing from unknown sources).
+
+The same build works with a keyboard and with thumbs: on a phone, **on-screen buttons appear by
+themselves** and the keyboard controls simply go unused. `TouchControls` draws them and writes into
+`VirtualInput`, which every input script reads **alongside** the keyboard - which is why nothing
+else had to be rewritten.
+
+| On screen | Does |
+|---|---|
+| **Left pad** | Walking: move. Flying: nose up/down and roll left/right |
+| **Drag anywhere else** | Look around |
+| **USE** | Board at the gate, take off in the cockpit |
+| **THR + / THR −** | Throttle |
+| **GEAR** | Wheels up and down |
+| **VIEW** | Swap pilot's seat and outside camera |
+| **LAND** | Appears once you're high enough with the gear up |
+| **FLY AGAIN** | On the arrival card |
+
+The phone build is **32-bit (armeabi-v7a)**. Unity's 64-bit backend, IL2CPP, compiles through the
+Android NDK, and the NDK installed here (r27) isn't the version this Unity expects (r23b) - so the
+Mono backend is used instead, which needs no NDK. It installs on the large majority of phones,
+because 64-bit Android devices almost all still run 32-bit apps, but a **64-bit-only device will
+refuse it**. Installing NDK r23b and switching to IL2CPP would fix that.
 
 ---
 

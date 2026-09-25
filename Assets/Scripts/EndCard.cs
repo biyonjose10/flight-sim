@@ -62,7 +62,7 @@ namespace FlightSim
         {
             if (!Showing || restarting) return;
 
-            if (Input.GetKeyDown(FlightLayout.Landing.RestartKey))
+            if (Input.GetKeyDown(FlightLayout.Landing.RestartKey) || VirtualInput.ConsumeRestart())
             {
                 restarting = true;
                 Debug.Log("[SCENE] Flying again from the beginning");

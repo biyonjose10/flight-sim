@@ -117,7 +117,8 @@ namespace FlightSim.Build
             var hud = SceneKit.GameSystems(
                 "Take-off - Runway 09",
                 "Open the throttle with E, and pull back once you are fast enough",
-                "W/S pitch    A/D roll    Q/E throttle    Space gear    V view    L land    Esc cursor");
+                "W/S pitch    A/D roll    Q/E throttle    Space gear    V view    L land    Esc cursor",
+                TouchControls.Mode.Flying);
 
             var flight = hud.gameObject.AddComponent<FlightHUD>();
             flight.offerLanding = true;

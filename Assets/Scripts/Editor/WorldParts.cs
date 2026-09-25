@@ -83,7 +83,8 @@ namespace FlightSim.Build
         // ------------------------------------------------------------------- materials
 
         static Material fieldGreen, fieldOlive, fieldBrown, road, hamletWall, hamletRoof,
-                        towerGreyA, towerGreyB, towerWindow, sand, sea, hillHaze, cloud;
+                        towerGreyA, towerGreyB, towerWindow, sand, sea, hillHaze, cloud,
+                        meadow, heath, trunk, leafDark, leafLight, freshWater, hillNear;
 
         // ----------------------------------------------------------------- entry points
 
@@ -93,6 +94,14 @@ namespace FlightSim.Build
             CreateMaterials();
 
             Ground(parent);
+
+            // Landscape first, then everything that sits on top of it. The order matters only
+            // because each layer is drawn a fraction higher than the last, so nothing flickers.
+            GroundPatches(parent);
+            RollingHills(parent);
+            Water(parent);
+            Woods(parent);
+
             Airfield(parent);
             Countryside(parent);
             Towers(parent);
@@ -136,6 +145,14 @@ namespace FlightSim.Build
             sea         = Prim.Mat("Sea", new Color(0.12f, 0.28f, 0.45f), 0.1f, 0.8f);
             hillHaze    = Prim.Mat("Distant Hills", new Color(0.42f, 0.5f, 0.45f), 0f, 0.05f);
             cloud       = Prim.Mat("Cloud", new Color(0.97f, 0.97f, 0.98f), 0f, 0.05f);
+
+            meadow      = Prim.Mat("Meadow", new Color(0.4f, 0.53f, 0.25f), 0f, 0.05f);
+            heath       = Prim.Mat("Heath", new Color(0.3f, 0.36f, 0.2f), 0f, 0.05f);
+            trunk       = Prim.Mat("Tree Trunk", new Color(0.3f, 0.22f, 0.15f), 0f, 0.1f);
+            leafDark    = Prim.Mat("Tree Leaves Dark", new Color(0.16f, 0.32f, 0.15f), 0f, 0.08f);
+            leafLight   = Prim.Mat("Tree Leaves Light", new Color(0.24f, 0.42f, 0.18f), 0f, 0.08f);
+            freshWater  = Prim.Mat("Fresh Water", new Color(0.16f, 0.34f, 0.44f), 0.1f, 0.85f);
+            hillNear    = Prim.Mat("Rolling Hills", new Color(0.34f, 0.45f, 0.26f), 0f, 0.05f);
         }
 
         // ---------------------------------------------------------------------- 1. ground
@@ -374,6 +391,162 @@ namespace FlightSim.Build
         static bool NearAirfield(float x, float z)
         {
             return Mathf.Abs(x) < AirfieldKeepOutX && Mathf.Abs(z) < AirfieldKeepOutZ;
+        }
+
+        // ------------------------------------------------------- extra landscape detail
+
+        // These exist because from a few hundred metres up the old world read as a flat green
+        // table. Height, water and trees are what actually make ground look like ground.
+        const int GroundPatchCount = 150;
+        const int WoodCount = 90;           // clumps of trees, not single trees
+        const int TreesPerWood = 9;
+        const int RollingHillCount = 70;
+        const int LakeCount = 7;
+        const int RiverLinks = 46;
+        const int DetailSeed = 71741;
+
+        /// <summary>
+        /// Big soft patches of slightly different greens and browns laid over the grass.
+        ///
+        /// One flat colour over thirty kilometres is what made the land look like a table. Real
+        /// ground is never one colour, and at altitude the patchwork is most of what tells you you
+        /// are moving. They are stacked at slightly different heights so no two ever fight over
+        /// the same pixels.
+        /// </summary>
+        static void GroundPatches(Transform parent)
+        {
+            var g = Prim.Empty(parent, "Ground Patches", Vector3.zero).transform;
+            var rng = new System.Random(DetailSeed);
+            var shades = new[] { meadow, heath, fieldGreen, fieldOlive };
+
+            for (int i = 0; i < GroundPatchCount; i++)
+            {
+                float x = Range(rng, -18000f, W.CoastX - 400f);
+                float z = Range(rng, -14000f, 14000f);
+                if (NearAirfield(x, z)) continue;
+
+                float wide = Range(rng, 900f, 3400f);
+                float deep = Range(rng, 800f, 2800f);
+
+                Prim.Box(g, "Ground Patch", new Vector3(x, W.GroundY + 0.03f, z),
+                         new Vector3(wide, 0.04f, deep), new Vector3(0f, Range(rng, -20f, 20f), 0f),
+                         shades[rng.Next(shades.Length)]);
+            }
+        }
+
+        /// <summary>
+        /// Woods: clumps of simple trees, a trunk with a blob of leaves on top.
+        ///
+        /// Trees are the cheapest thing that makes ground look inhabited from the air, because
+        /// they give the surface texture and a sense of scale. They are grouped into woods rather
+        /// than sprinkled evenly, which is how trees actually grow and reads far better than a
+        /// uniform dusting.
+        /// </summary>
+        static void Woods(Transform parent)
+        {
+            var w = Prim.Empty(parent, "Woods", Vector3.zero).transform;
+            var rng = new System.Random(DetailSeed + 7);
+
+            for (int i = 0; i < WoodCount; i++)
+            {
+                float cx = Range(rng, -16000f, W.CoastX - 600f);
+                float cz = Range(rng, -13000f, 13000f);
+                if (NearAirfield(cx, cz)) continue;
+
+                float spread = Range(rng, 90f, 320f);
+                var wood = Prim.Empty(w, "Wood", new Vector3(cx, W.GroundY, cz)).transform;
+
+                for (int t = 0; t < TreesPerWood; t++)
+                {
+                    float tx = Range(rng, -spread, spread);
+                    float tz = Range(rng, -spread, spread);
+                    float height = Range(rng, 14f, 26f);
+
+                    Prim.Cyl(wood, "Trunk", new Vector3(tx, height * 0.3f, tz),
+                             height * 0.07f, height * 0.6f, Prim.AxisY, trunk);
+                    Prim.Sphere(wood, "Leaves", new Vector3(tx, height * 0.78f, tz),
+                                Vector3.one * height * 0.78f,
+                                rng.NextDouble() > 0.5 ? leafDark : leafLight);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Lakes, and a river winding out to the coast.
+        ///
+        /// Water is the single most useful thing to add to a green landscape: it is a completely
+        /// different colour and it catches the light, so it breaks the ground up from any height.
+        /// The river is a chain of overlapping boxes, each turned a little from the last, which is
+        /// enough to read as a winding line without any curved geometry.
+        /// </summary>
+        static void Water(Transform parent)
+        {
+            var wt = Prim.Empty(parent, "Inland Water", Vector3.zero).transform;
+            var rng = new System.Random(DetailSeed + 21);
+
+            for (int i = 0; i < LakeCount; i++)
+            {
+                float x = Range(rng, -15000f, W.CoastX - 1500f);
+                float z = Range(rng, -11000f, 11000f);
+                if (NearAirfield(x, z)) continue;
+
+                float wide = Range(rng, 500f, 1900f);
+                float deep = Range(rng, 400f, 1300f);
+
+                Prim.Box(wt, "Lake", new Vector3(x, W.GroundY + 0.09f, z),
+                         new Vector3(wide, 0.05f, deep), new Vector3(0f, Range(rng, -30f, 30f), 0f), freshWater);
+            }
+
+            // The river starts inland and wanders east until it reaches the sea.
+            float rx = -13000f;
+            float rz = 5200f;
+            float heading = 8f;
+
+            for (int i = 0; i < RiverLinks; i++)
+            {
+                float length = 620f;
+                heading += Range(rng, -13f, 13f);
+
+                Prim.Box(wt, "River", new Vector3(rx, W.GroundY + 0.1f, rz),
+                         new Vector3(length, 0.05f, Range(rng, 55f, 95f)),
+                         new Vector3(0f, heading, 0f), freshWater);
+
+                // Each link steps forward by less than its own length, so consecutive boxes
+                // overlap. Step the full length and every bend leaves a visible notch.
+                rx += Mathf.Cos(heading * Mathf.Deg2Rad) * length * 0.7f;
+                rz -= Mathf.Sin(heading * Mathf.Deg2Rad) * length * 0.7f;
+
+                if (rx > W.CoastX) break;
+            }
+        }
+
+        /// <summary>
+        /// Low rolling hills under the flight path, made from squashed spheres sunk into the
+        /// ground so only their tops show.
+        ///
+        /// The distant ridges already gave the horizon a shape, but everything between here and
+        /// there was flat. These are nearer and smaller, so the ground actually rises and falls
+        /// underneath you as you fly over it.
+        /// </summary>
+        static void RollingHills(Transform parent)
+        {
+            var h = Prim.Empty(parent, "Rolling Hills", Vector3.zero).transform;
+            var rng = new System.Random(DetailSeed + 33);
+
+            for (int i = 0; i < RollingHillCount; i++)
+            {
+                float x = Range(rng, -17000f, W.CoastX - 900f);
+                float z = Range(rng, -13000f, 13000f);
+                if (NearAirfield(x, z)) continue;
+
+                float wide = Range(rng, 700f, 2600f);
+                float tall = Range(rng, 60f, 220f);
+
+                // Sunk by half its height, so the sphere reads as a hill rather than a ball
+                // sitting on a table.
+                Prim.NoShadow(Prim.Sphere(h, "Hill", new Vector3(x, W.GroundY - tall * 0.35f, z),
+                                          new Vector3(wide, tall * 2f, wide * Range(rng, 0.6f, 1.2f)), hillNear));
+            }
         }
 
         // ---------------------------------------------------------------------- 4. towers

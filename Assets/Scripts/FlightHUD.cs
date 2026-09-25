@@ -82,7 +82,9 @@ namespace FlightSim
                 return;
             }
 
-            if (offerLanding && plane.ReadyToLand && Input.GetKeyDown(FlightLayout.Flight.LandingKey))
+            bool landPressed = Input.GetKeyDown(FlightLayout.Flight.LandingKey) || VirtualInput.ConsumeLand();
+
+            if (offerLanding && plane.ReadyToLand && landPressed)
             {
                 Debug.Log("[FLIGHT] Beginning the approach");
                 SceneFader.GoTo(FlightLayout.LandingScene, "The landing is scene 4 - it hasn't been built yet.");

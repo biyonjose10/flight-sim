@@ -188,6 +188,18 @@ namespace FlightSim
                 if (Input.GetKey(KeyCode.Q)) throttleInput -= 1f;
 
                 if (Input.GetKeyDown(KeyCode.Space)) ToggleGear();
+
+                // The same four controls again, from the on-screen buttons on a phone. Adding
+                // them to the keyboard's numbers means there is only ever one flight model.
+                pitchInput += VirtualInput.Move;
+                rollInput += VirtualInput.Strafe;
+                throttleInput += VirtualInput.Throttle;
+
+                if (VirtualInput.ConsumeGear()) ToggleGear();
+
+                pitchInput = Mathf.Clamp(pitchInput, -1f, 1f);
+                rollInput = Mathf.Clamp(rollInput, -1f, 1f);
+                throttleInput = Mathf.Clamp(throttleInput, -1f, 1f);
             }
 
             throttle = Mathf.Clamp01(throttle + throttleInput * F.ThrottleRate * dt);

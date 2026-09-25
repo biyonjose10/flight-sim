@@ -94,7 +94,8 @@ namespace FlightSim.Build
             var hud = SceneKit.GameSystems(
                 "Final Approach - Runway 09",
                 "Sit back. Press V to watch from outside.",
-                "V view    Mouse look    Esc free cursor");
+                "V view    Mouse look    Esc free cursor",
+                TouchControls.Mode.Watching);
 
             var flight = hud.gameObject.AddComponent<FlightHUD>();
             flight.offerLanding = false;

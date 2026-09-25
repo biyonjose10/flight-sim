@@ -79,12 +79,22 @@ namespace FlightSim
 
             if (!inputEnabled) return;
 
-            if (Input.GetKeyDown(FlightLayout.FlightCam.ToggleKey)) Toggle();
+            if (Input.GetKeyDown(FlightLayout.FlightCam.ToggleKey) || VirtualInput.ConsumeView()) Toggle();
 
-            if (Cursor.lockState != CursorLockMode.Locked) return;
+            // A phone has no cursor to lock, so the drag has to be added before that test - put it
+            // after and the touch controls would silently do nothing on the only platform they
+            // exist for.
+            float mx = VirtualInput.LookDelta.x;
+            float my = VirtualInput.LookDelta.y;
 
-            float mx = Input.GetAxis("Mouse X") * mouseSensitivity;
-            float my = Input.GetAxis("Mouse Y") * mouseSensitivity;
+            if (Cursor.lockState == CursorLockMode.Locked)
+            {
+                mx += Input.GetAxis("Mouse X") * mouseSensitivity;
+                my += Input.GetAxis("Mouse Y") * mouseSensitivity;
+            }
+
+            if (Mathf.Abs(mx) < 0.0001f && Mathf.Abs(my) < 0.0001f &&
+                Mathf.Abs(Input.GetAxis("Mouse ScrollWheel")) < 0.0001f) return;
 
 
             if (chaseView)

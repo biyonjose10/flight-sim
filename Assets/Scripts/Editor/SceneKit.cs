@@ -143,7 +143,8 @@ namespace FlightSim.Build
         /// One object holding the HUD and the fader for this scene. The controls hint is passed
         /// in because the walking scenes and the flying scenes use completely different keys.
         /// </summary>
-        public static PromptHUD GameSystems(string title, string subtitle, string controlsHint = null)
+        public static PromptHUD GameSystems(string title, string subtitle, string controlsHint = null,
+                                            TouchControls.Mode touchMode = TouchControls.Mode.Walking)
         {
             var go = new GameObject("Game Systems");
 
@@ -153,6 +154,12 @@ namespace FlightSim.Build
             if (controlsHint != null) hud.controlsHint = controlsHint;
 
             go.AddComponent<SceneFader>();
+
+            // The on-screen buttons for phones. They draw themselves only on a mobile device, so
+            // the same build runs with a keyboard on a PC and with thumbs on Android.
+            var touch = go.AddComponent<TouchControls>();
+            touch.mode = touchMode;
+
             return hud;
         }
 

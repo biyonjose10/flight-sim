@@ -63,7 +63,8 @@ namespace FlightSim
                 }
             }
 
-            if (playerInside && Input.GetKeyDown(key))
+            // The on-screen USE button does the same as pressing the key.
+            if (playerInside && (Input.GetKeyDown(key) || VirtualInput.ConsumeUse()))
             {
                 Use();
             }
