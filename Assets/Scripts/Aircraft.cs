@@ -90,12 +90,16 @@ namespace FlightSim
         public float Knots { get { return speed * 1.94384f; } }
 
         /// <summary>
-        /// True when the landing prompt should be offered: airborne, tidied up, and high enough
-        /// that starting an approach makes sense.
+        /// True when pressing L should start the approach - which is very nearly always.
+        ///
+        /// This used to insist you were airborne, above 300 m and with the wheels up, which read
+        /// as the landing key being broken: you press L, nothing happens, and nothing tells you
+        /// why. Being allowed to ask for the approach whenever you like is worth far more than
+        /// the realism of refusing, so the only thing that stops it now is having crashed.
         /// </summary>
         public bool ReadyToLand
         {
-            get { return !onGround && !crashed && !gearDown && Altitude > FlightLayout.Flight.LandingPromptAltitude; }
+            get { return !crashed; }
         }
 
         // ---------------------------------------------------------------------- setting up
