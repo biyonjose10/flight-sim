@@ -92,7 +92,11 @@ namespace FlightSim
 
         void Look()
         {
+            // On Android the primary touch is ALSO reported as the mouse, so the finger on
+            // the joystick was turning the view at the same time as steering. Where on-screen
+            // controls exist they are the only pointer that counts.
             bool mouseControlsView = inputEnabled && !hasAutopilotTarget &&
+                                     !VirtualInput.Active &&
                                      Cursor.lockState == CursorLockMode.Locked;
 
             if (mouseControlsView)

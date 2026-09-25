@@ -87,7 +87,9 @@ namespace FlightSim
             float mx = VirtualInput.LookDelta.x;
             float my = VirtualInput.LookDelta.y;
 
-            if (Cursor.lockState == CursorLockMode.Locked)
+            // Android reports the primary touch as the mouse too, so without this the
+            // joystick finger swung the camera around as well as flying the plane.
+            if (!VirtualInput.Active && Cursor.lockState == CursorLockMode.Locked)
             {
                 mx += Input.GetAxis("Mouse X") * mouseSensitivity;
                 my += Input.GetAxis("Mouse Y") * mouseSensitivity;

@@ -92,10 +92,9 @@ namespace FlightSim
             ApplyStick();
         }
 
-        void LateUpdate()
-        {
-            VirtualInput.EndFrame();
-        }
+        // There is deliberately no LateUpdate clearing presses here. Wiping them at the end of the
+        // frame is what lost taps whose reader happened to run before this script - VirtualInput
+        // expires them by frame number instead.
 
         // --------------------------------------------------------------------------- layout
 
