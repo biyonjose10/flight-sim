@@ -160,6 +160,9 @@ namespace FlightSim.Build
             var touch = go.AddComponent<TouchControls>();
             touch.mode = touchMode;
 
+            // And the graphics settings a phone can actually keep up with. Also mobile-only.
+            go.AddComponent<MobileQuality>();
+
             return hud;
         }
 

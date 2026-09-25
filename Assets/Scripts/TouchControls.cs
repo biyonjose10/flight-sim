@@ -3,66 +3,78 @@ using UnityEngine;
 namespace FlightSim
 {
     /// <summary>
-    /// The on-screen buttons you play with on a phone.
+    /// The on-screen controls you play with on a phone: an analogue joystick on the left, buttons
+    /// on the right, and drag-anywhere-else to look around.
     ///
-    /// It draws a pad on the left for movement and a column of buttons on the right for everything
-    /// else, and it writes what you are pressing into VirtualInput. The rest of the game reads
-    /// VirtualInput next to the keyboard, so nothing else had to change to make the game playable
-    /// with thumbs.
+    /// **It reads Input.touches itself rather than using GUI buttons, and that is the whole
+    /// point.** Unity's built-in GUI controls only ever follow ONE finger on a phone, because they
+    /// were written for a mouse and a mouse has one pointer. With GUI buttons you cannot hold the
+    /// joystick and press the throttle at the same time, which makes a flight sim unplayable.
+    /// Handling the touches directly means every finger is tracked separately: joystick, throttle
+    /// and looking around can all happen at once.
     ///
-    /// Looking around is a DRAG rather than a button. Anywhere on the screen that is not a button
-    /// works, the way it does in most phone games - buttons for the things that are on or off, and
-    /// dragging for the thing that needs to be smooth.
+    /// The joystick is analogue, not four arrows. How far you push it decides how hard you pitch
+    /// or roll, so you can make a small correction instead of only ever having "hard left".
     ///
-    /// Which buttons appear depends on the scene: walking needs a direction pad and "use", flying
-    /// needs pitch, roll, throttle, gear and the camera, and the landing needs almost nothing
-    /// because it flies itself.
+    /// Its centre appears wherever your thumb lands rather than being painted in a fixed spot,
+    /// which is what makes it comfortable: you never have to look down to find it.
     ///
-    /// Everything is drawn with OnGUI, the same as the rest of the display in this project, so the
-    /// whole thing is one file you can read top to bottom instead of a tree of Canvas objects.
-    /// Sizes are fractions of the screen height, so the buttons stay thumb-sized on any phone.
+    /// Drawing still happens in OnGUI, but only DrawTexture and Label - nothing interactive - so
+    /// the drawing code cannot steal a touch from the logic above.
     /// </summary>
     [DisallowMultipleComponent]
     public class TouchControls : MonoBehaviour
     {
         public enum Mode { Walking, Flying, Watching }
 
+        enum Act { None, Use, Gear, View, Land, Restart, ThrottleUp, ThrottleDown }
+
+        struct Button
+        {
+            public Rect rect;
+            public string label;
+            public Act act;
+            public bool hold;     // true keeps firing while held, false fires once on touch
+        }
+
         [Header("What this scene needs")]
         public Mode mode = Mode.Walking;
 
-        [Tooltip("Show the buttons on a PC too. Handy for checking the layout without a phone.")]
+        [Tooltip("Show the controls on a PC too, so the layout can be checked without a phone.")]
         public bool alwaysShow = false;
 
         [Header("Feel")]
         [Tooltip("How far the view turns per pixel of drag.")]
-        public float dragSensitivity = 0.12f;
-        [Range(0f, 1f)] public float buttonAlpha = 0.28f;
+        public float dragSensitivity = 0.11f;
 
-        // Worked out once per frame from the screen size, and used both for drawing the buttons
-        // and for deciding whether a touch counts as a drag or as a button press.
-        Rect padUp, padDown, padLeft, padRight;
-        Rect actionA, actionB, actionC, actionD;
-        string labelA, labelB, labelC, labelD;
+        [Tooltip("How far the joystick has to be pushed for full deflection, as a fraction of screen height.")]
+        [Range(0.05f, 0.3f)] public float stickRadius = 0.13f;
 
-        GUIStyle buttonStyle;
-        Texture2D white;
-        int dragFinger = -1;
+        [Range(0f, 1f)] public float controlAlpha = 0.3f;
 
-        /// <summary>True when the on-screen controls should be drawn at all.</summary>
+        readonly Button[] buttons = new Button[6];
+        int buttonCount;
+
+        int stickFinger = -1, lookFinger = -1;
+        Vector2 stickOrigin, stickNow;
+
+        Texture2D dot, box;
+        GUIStyle labelStyle;
+
+        /// <summary>True when the on-screen controls should be drawn and read at all.</summary>
         public bool Showing { get { return alwaysShow || Application.isMobilePlatform; } }
 
         void Awake()
         {
-            white = new Texture2D(1, 1);
-            white.SetPixel(0, 0, Color.white);
-            white.Apply();
-
+            box = Solid(Color.white);
+            dot = Disc();
             VirtualInput.Reset();
         }
 
         void OnDestroy()
         {
-            if (white != null) Destroy(white);
+            if (box != null) Destroy(box);
+            if (dot != null) Destroy(dot);
             VirtualInput.Reset();
         }
 
@@ -71,104 +83,238 @@ namespace FlightSim
             VirtualInput.Active = Showing;
             if (!Showing) return;
 
-            Layout();
-            ReadDrag();
+            LayOutButtons();
+
+            VirtualInput.LookDelta = Vector2.zero;
+            VirtualInput.Throttle = 0f;
+
+            ReadTouches();
+            ApplyStick();
         }
 
-        /// <summary>Anything nobody acted on is dropped at the end of the frame.</summary>
         void LateUpdate()
         {
             VirtualInput.EndFrame();
         }
 
+        // --------------------------------------------------------------------------- layout
+
         /// <summary>
-        /// Where every button sits. Worked out from the screen height so the buttons are the same
-        /// physical size whatever the phone, and kept in one place because the drag code has to
-        /// agree with the drawing code about what counts as a button.
+        /// Where the buttons sit, worked out from the screen height so they stay thumb-sized on
+        /// any phone. Which buttons exist depends on the scene - the landing flies itself, so it
+        /// needs almost nothing.
         /// </summary>
-        void Layout()
+        void LayOutButtons()
         {
             float h = Screen.height;
             float w = Screen.width;
 
-            float b = h * 0.16f;          // button size - about a thumb
-            float edge = h * 0.04f;       // margin from the screen edge
-            float gap = h * 0.012f;
+            float b = h * 0.17f;
+            float edge = h * 0.05f;
+            float gap = h * 0.02f;
 
-            // Left: a four-way pad.
-            float padCx = edge + b * 1.5f + gap;
-            float padCy = h - edge - b * 1.5f - gap;
-
-            padUp = new Rect(padCx - b * 0.5f, padCy - b * 1.5f - gap, b, b);
-            padDown = new Rect(padCx - b * 0.5f, padCy + b * 0.5f + gap, b, b);
-            padLeft = new Rect(padCx - b * 1.5f - gap, padCy - b * 0.5f, b, b);
-            padRight = new Rect(padCx + b * 0.5f + gap, padCy - b * 0.5f, b, b);
-
-            // Right: a column of the buttons this scene actually uses.
-            float rx = w - edge - b;
-            float ry = h - edge - b;
-
-            actionA = new Rect(rx, ry, b, b);
-            actionB = new Rect(rx - b - gap, ry, b, b);
-            actionC = new Rect(rx, ry - b - gap, b, b);
-            actionD = new Rect(rx - b - gap, ry - b - gap, b, b);
+            buttonCount = 0;
 
             switch (mode)
             {
                 case Mode.Walking:
-                    labelA = "USE"; labelB = null; labelC = null; labelD = null;
+                    Add(new Rect(w - edge - b, h - edge - b, b, b), "USE", Act.Use, false);
                     break;
 
                 case Mode.Flying:
-                    labelA = "THR +"; labelB = "THR -"; labelC = "VIEW"; labelD = "GEAR";
+                    Add(new Rect(w - edge - b, h - edge - b, b, b), "THR\n+", Act.ThrottleUp, true);
+                    Add(new Rect(w - edge - b * 2f - gap, h - edge - b, b, b), "THR\n−", Act.ThrottleDown, true);
+                    Add(new Rect(w - edge - b, h - edge - b * 2f - gap, b, b), "VIEW", Act.View, false);
+                    Add(new Rect(w - edge - b * 2f - gap, h - edge - b * 2f - gap, b, b), "GEAR", Act.Gear, false);
+
+                    if (Aircraft.Instance != null && Aircraft.Instance.ReadyToLand)
+                        Add(new Rect(w - edge - b * 2f - gap, h - edge - b * 3f - gap * 2f,
+                                     b * 2f + gap, b * 0.7f), "LAND", Act.Land, false);
                     break;
 
                 default:
-                    labelA = null; labelB = null; labelC = "VIEW"; labelD = null;
+                    Add(new Rect(w - edge - b, h - edge - b, b, b), "VIEW", Act.View, false);
+
+                    if (EndCard.Instance != null && EndCard.Instance.Showing)
+                        Add(new Rect(w * 0.5f - h * 0.2f, h * 0.72f, h * 0.4f, h * 0.11f),
+                            "FLY AGAIN", Act.Restart, false);
                     break;
+            }
+        }
+
+        void Add(Rect r, string label, Act act, bool hold)
+        {
+            buttons[buttonCount].rect = r;
+            buttons[buttonCount].label = label;
+            buttons[buttonCount].act = act;
+            buttons[buttonCount].hold = hold;
+            buttonCount++;
+        }
+
+        // --------------------------------------------------------------------------- touches
+
+        /// <summary>
+        /// Sorts every finger on the screen into one of three jobs: working a button, working the
+        /// joystick, or looking around. Each finger is followed by its own id from the moment it
+        /// lands until it lifts, so they never swap jobs halfway through a gesture.
+        /// </summary>
+        void ReadTouches()
+        {
+            int count = Input.touchCount;
+
+            // In the editor there are no touches, so the mouse stands in as a single finger. That
+            // is only so the layout can be checked on a PC; a phone never takes this path.
+            if (count == 0 && alwaysShow && Input.GetMouseButton(0))
+            {
+                HandleMousePretendingToBeATouch();
+                return;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                Touch t = Input.GetTouch(i);
+
+                // Touches are measured from the bottom left, GUI rectangles from the top left.
+                Vector2 p = new Vector2(t.position.x, Screen.height - t.position.y);
+
+                if (t.phase == TouchPhase.Began)
+                {
+                    int hit = ButtonUnder(p);
+
+                    if (hit >= 0)
+                    {
+                        if (!buttons[hit].hold) Fire(buttons[hit].act);
+                        continue;
+                    }
+
+                    if (stickFinger < 0 && InStickZone(p))
+                    {
+                        stickFinger = t.fingerId;
+                        stickOrigin = p;
+                        stickNow = p;
+                        continue;
+                    }
+
+                    if (lookFinger < 0) lookFinger = t.fingerId;
+                    continue;
+                }
+
+                if (t.fingerId == stickFinger)
+                {
+                    stickNow = p;
+                }
+                else if (t.fingerId == lookFinger)
+                {
+                    if (t.phase == TouchPhase.Moved)
+                        VirtualInput.LookDelta += t.deltaPosition * dragSensitivity;
+                }
+                else
+                {
+                    // A finger resting on a hold button keeps it firing.
+                    int hit = ButtonUnder(p);
+                    if (hit >= 0 && buttons[hit].hold) Fire(buttons[hit].act);
+                }
+
+                if (t.phase == TouchPhase.Ended || t.phase == TouchPhase.Canceled)
+                {
+                    if (t.fingerId == stickFinger) stickFinger = -1;
+                    if (t.fingerId == lookFinger) lookFinger = -1;
+                }
+            }
+
+            if (count == 0)
+            {
+                stickFinger = -1;
+                lookFinger = -1;
+            }
+        }
+
+        void HandleMousePretendingToBeATouch()
+        {
+            Vector2 p = new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y);
+
+            if (Input.GetMouseButtonDown(0))
+            {
+                int hit = ButtonUnder(p);
+                if (hit >= 0)
+                {
+                    if (!buttons[hit].hold) Fire(buttons[hit].act);
+                    return;
+                }
+
+                if (InStickZone(p)) { stickFinger = 9999; stickOrigin = p; }
+            }
+
+            if (stickFinger == 9999) stickNow = p;
+
+            int held = ButtonUnder(p);
+            if (held >= 0 && buttons[held].hold) Fire(buttons[held].act);
+        }
+
+        /// <summary>
+        /// The joystick lives in the lower left. Everywhere else is free for looking.
+        ///
+        /// Scene 4 has no joystick at all - it flies itself - so there the whole screen looks
+        /// around, and a thumb in the corner is not quietly swallowed by a stick that does nothing.
+        /// </summary>
+        bool InStickZone(Vector2 guiPoint)
+        {
+            if (mode == Mode.Watching) return false;
+
+            return guiPoint.x < Screen.width * 0.45f && guiPoint.y > Screen.height * 0.3f;
+        }
+
+        int ButtonUnder(Vector2 guiPoint)
+        {
+            for (int i = 0; i < buttonCount; i++)
+                if (buttons[i].rect.Contains(guiPoint)) return i;
+
+            return -1;
+        }
+
+        void Fire(Act act)
+        {
+            switch (act)
+            {
+                case Act.Use: VirtualInput.PressUse(); break;
+                case Act.Gear: VirtualInput.PressGear(); break;
+                case Act.View: VirtualInput.PressView(); break;
+                case Act.Land: VirtualInput.PressLand(); break;
+                case Act.Restart: VirtualInput.PressRestart(); break;
+                case Act.ThrottleUp: VirtualInput.Throttle = 1f; break;
+                case Act.ThrottleDown: VirtualInput.Throttle = -1f; break;
             }
         }
 
         /// <summary>
-        /// Turns a finger dragged across the screen into a look. Any touch that did not start on a
-        /// button counts, and only one finger at a time drives the view - otherwise resting a
-        /// second thumb on the screen would fight with the first.
+        /// Turns how far the joystick is pushed into the two movement numbers.
+        ///
+        /// The push is divided by the maximum reach and then clamped, so half a push really is
+        /// half the input. That is the difference between a joystick and four arrow buttons, and
+        /// it is what lets you hold a gentle bank instead of sawing left and right.
         /// </summary>
-        void ReadDrag()
+        void ApplyStick()
         {
-            VirtualInput.LookDelta = Vector2.zero;
-
-            for (int i = 0; i < Input.touchCount; i++)
+            if (stickFinger < 0)
             {
-                Touch t = Input.GetTouch(i);
-
-                // Touch positions come from the bottom left, GUI rectangles from the top left.
-                Vector2 gui = new Vector2(t.position.x, Screen.height - t.position.y);
-
-                if (t.phase == TouchPhase.Began && dragFinger < 0 && !OnAButton(gui))
-                    dragFinger = t.fingerId;
-
-                if (t.fingerId != dragFinger) continue;
-
-                if (t.phase == TouchPhase.Moved)
-                    VirtualInput.LookDelta = t.deltaPosition * dragSensitivity;
-
-                if (t.phase == TouchPhase.Ended || t.phase == TouchPhase.Canceled)
-                    dragFinger = -1;
+                VirtualInput.Move = 0f;
+                VirtualInput.Strafe = 0f;
+                return;
             }
 
-            if (Input.touchCount == 0) dragFinger = -1;
+            float reach = Screen.height * stickRadius;
+            Vector2 push = stickNow - stickOrigin;
+
+            if (push.magnitude > reach) push = push.normalized * reach;
+
+            VirtualInput.Strafe = Mathf.Clamp(push.x / reach, -1f, 1f);
+
+            // Screen y grows downwards, so pushing the stick UP is a NEGATIVE y. Forward, and
+            // nose-up, both want a positive number, hence the minus.
+            VirtualInput.Move = Mathf.Clamp(-push.y / reach, -1f, 1f);
         }
 
-        bool OnAButton(Vector2 guiPoint)
-        {
-            return padUp.Contains(guiPoint) || padDown.Contains(guiPoint) ||
-                   padLeft.Contains(guiPoint) || padRight.Contains(guiPoint) ||
-                   (labelA != null && actionA.Contains(guiPoint)) ||
-                   (labelB != null && actionB.Contains(guiPoint)) ||
-                   (labelC != null && actionC.Contains(guiPoint)) ||
-                   (labelD != null && actionD.Contains(guiPoint));
-        }
+        // --------------------------------------------------------------------------- drawing
 
         void OnGUI()
         {
@@ -176,104 +322,94 @@ namespace FlightSim
 
             EnsureStyle();
 
-            // The held axes are rebuilt from scratch every frame, so letting go clears them.
-            float move = 0f, strafe = 0f, throttle = 0f;
-
-            if (mode != Mode.Watching)
+            for (int i = 0; i < buttonCount; i++)
             {
-                // Flying, "up" raises the nose. A real control column works the other way round -
-                // you pull BACK to climb - but on a phone an up arrow that makes you go down is
-                // simply confusing, and Aircraft treats a positive pitch input as nose-up anyway.
-                if (Held(padUp, mode == Mode.Flying ? "NOSE\nUP" : "FWD")) move += 1f;
-                if (Held(padDown, mode == Mode.Flying ? "NOSE\nDOWN" : "BACK")) move -= 1f;
-                if (Held(padLeft, mode == Mode.Flying ? "ROLL\nL" : "LEFT")) strafe -= 1f;
-                if (Held(padRight, mode == Mode.Flying ? "ROLL\nR" : "RIGHT")) strafe += 1f;
+                Tint(new Color(0f, 0f, 0f, controlAlpha));
+                GUI.DrawTexture(buttons[i].rect, box);
+                Tint(Color.white);
+                GUI.Label(buttons[i].rect, buttons[i].label, labelStyle);
             }
 
-            switch (mode)
-            {
-                case Mode.Walking:
-                    if (Tapped(actionA, labelA)) VirtualInput.PressUse();
-                    break;
+            if (mode == Mode.Watching) return;
 
-                case Mode.Flying:
-                    if (Held(actionA, labelA)) throttle += 1f;
-                    if (Held(actionB, labelB)) throttle -= 1f;
-                    if (Tapped(actionC, labelC)) VirtualInput.PressView();
-                    if (Tapped(actionD, labelD)) VirtualInput.PressGear();
-
-                    // The landing button only appears when the plane is actually ready for it, so
-                    // the screen is not cluttered with something that would do nothing.
-                    if (Aircraft.Instance != null && Aircraft.Instance.ReadyToLand)
-                    {
-                        var landRect = new Rect(actionA.x - actionA.width * 0.5f,
-                                                actionC.y - actionA.height - Screen.height * 0.012f,
-                                                actionA.width * 1.5f, actionA.height * 0.75f);
-                        if (Tapped(landRect, "LAND")) VirtualInput.PressLand();
-                    }
-                    break;
-
-                default:
-                    if (Tapped(actionC, labelC)) VirtualInput.PressView();
-
-                    if (EndCard.Instance != null && EndCard.Instance.Showing)
-                    {
-                        var again = new Rect(Screen.width * 0.5f - Screen.height * 0.16f,
-                                             Screen.height * 0.72f,
-                                             Screen.height * 0.32f, Screen.height * 0.1f);
-                        if (Tapped(again, "FLY AGAIN")) VirtualInput.PressRestart();
-                    }
-                    break;
-            }
-
-            VirtualInput.Move = move;
-            VirtualInput.Strafe = strafe;
-            VirtualInput.Throttle = throttle;
+            DrawStick();
         }
 
-        /// <summary>A button that does something for as long as you hold it down.</summary>
-        bool Held(Rect r, string label)
+        /// <summary>
+        /// The joystick, drawn only once a thumb is on it. Drawing it all the time would mean
+        /// painting a ring in a spot the thumb may never go near.
+        /// </summary>
+        void DrawStick()
         {
-            if (label == null) return false;
+            if (stickFinger < 0) return;
 
-            Background(r);
-            return GUI.RepeatButton(r, label, buttonStyle);
+            float reach = Screen.height * stickRadius;
+
+            Tint(new Color(1f, 1f, 1f, controlAlpha * 0.6f));
+            GUI.DrawTexture(new Rect(stickOrigin.x - reach, stickOrigin.y - reach, reach * 2f, reach * 2f), dot);
+
+            Vector2 push = stickNow - stickOrigin;
+            if (push.magnitude > reach) push = push.normalized * reach;
+
+            float knob = reach * 0.45f;
+            Vector2 c = stickOrigin + push;
+
+            Tint(new Color(1f, 1f, 1f, 0.75f));
+            GUI.DrawTexture(new Rect(c.x - knob, c.y - knob, knob * 2f, knob * 2f), dot);
+            Tint(Color.white);
         }
 
-        /// <summary>A button that does something once, when you tap it.</summary>
-        bool Tapped(Rect r, string label)
+        static void Tint(Color c)
         {
-            if (label == null) return false;
-
-            Background(r);
-            return GUI.Button(r, label, buttonStyle);
-        }
-
-        void Background(Rect r)
-        {
-            GUI.color = new Color(0f, 0f, 0f, buttonAlpha);
-            GUI.DrawTexture(r, white);
-            GUI.color = Color.white;
+            GUI.color = c;
         }
 
         void EnsureStyle()
         {
-            if (buttonStyle == null)
+            if (labelStyle == null)
             {
-                buttonStyle = new GUIStyle(GUI.skin.button);
-                buttonStyle.alignment = TextAnchor.MiddleCenter;
-                buttonStyle.fontStyle = FontStyle.Bold;
-                buttonStyle.wordWrap = true;
-                buttonStyle.normal.textColor = Color.white;
-                buttonStyle.hover.textColor = Color.white;
-                buttonStyle.active.textColor = new Color(0.7f, 0.9f, 1f);
-
-                // Transparent so the dark box drawn underneath shows through.
-                buttonStyle.normal.background = null;
-                buttonStyle.active.background = null;
+                labelStyle = new GUIStyle(GUI.skin.label);
+                labelStyle.alignment = TextAnchor.MiddleCenter;
+                labelStyle.fontStyle = FontStyle.Bold;
+                labelStyle.wordWrap = true;
+                labelStyle.normal.textColor = Color.white;
             }
 
-            buttonStyle.fontSize = Mathf.Max(10, Mathf.RoundToInt(Screen.height * 0.022f));
+            labelStyle.fontSize = Mathf.Max(10, Mathf.RoundToInt(Screen.height * 0.024f));
+        }
+
+        static Texture2D Solid(Color c)
+        {
+            var t = new Texture2D(1, 1);
+            t.SetPixel(0, 0, c);
+            t.Apply();
+            return t;
+        }
+
+        /// <summary>
+        /// A filled circle, drawn into a texture once at startup. GUI.DrawTexture can only draw
+        /// rectangles, so a round joystick needs a round picture to draw.
+        /// </summary>
+        static Texture2D Disc()
+        {
+            const int size = 96;
+            var t = new Texture2D(size, size, TextureFormat.ARGB32, false);
+            float r = size * 0.5f;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r));
+
+                    // Fade over the last pixel or so, otherwise the edge is a staircase.
+                    float a = Mathf.Clamp01(r - d);
+                    t.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                }
+            }
+
+            t.Apply();
+            return t;
         }
     }
 }
